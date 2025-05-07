@@ -4,7 +4,6 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import { handleUserMessage } from './agentController.js';
 import emailjs from 'emailjs-com';
-import html2pdf from 'html2pdf.js';
 
 // Initialize Express app
 const app = express();
@@ -28,9 +27,16 @@ let conversationLog = [];
 const MESSAGE_THRESHOLD = 10;
 
 // Function to send email with PDF using EmailJS
-async function sendEmailWithPDF(pdfBuffer) {
+async function sendEmailWithPDF(pdfBlob) {
     try {
-        const base64PDF = pdfBuffer.toString('base64');
+        // Convert blob to base64
+        const base64PDF = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(pdfBlob);
+        });
+
         const response = await emailjs.send(
             'service_fidvxmm',
             'template_0svkc5i',
@@ -54,67 +60,29 @@ async function sendEmailWithPDF(pdfBuffer) {
     }
 }
 
-// Function to generate PDF
-async function generatePDF() {
-    // Build the conversation HTML for PDF
-    let html = `<h2 style="font-family: Arial, 'Noto Sans Hebrew', sans-serif;">סיכום שיחה עם דוני</h2>`;
-    html += `<div>נוצר בתאריך: ${new Date().toLocaleString('he-IL')}</div><br>`;
-    conversationLog.forEach(entry => {
-        const prefix = entry.isSystem ? 'דוני:' : 'אתה:';
-        html += `<div dir="rtl" style="margin-bottom:8px;"><b>${prefix}</b> ${entry.message}</div>`;
-    });
-
-    // Create a temporary file
-    const tempFile = 'temp_conversation.html';
-    fs.writeFileSync(tempFile, html);
-
-    // Generate PDF using html2pdf
-    const pdfBuffer = await new Promise((resolve, reject) => {
-        const options = {
-            margin: 0.5,
-            filename: 'insurance_summary.pdf',
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2 },
-            jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-        };
-
-        html2pdf()
-            .from(tempFile)
-            .set(options)
-            .outputPdf('buffer')
-            .then(buffer => {
-                // Clean up temp file
-                fs.unlinkSync(tempFile);
-                resolve(buffer);
-            })
-            .catch(error => {
-                // Clean up temp file even if there's an error
-                if (fs.existsSync(tempFile)) {
-                    fs.unlinkSync(tempFile);
-                }
-                reject(error);
-            });
-    });
-
-    return pdfBuffer;
-}
-
 // Chat endpoint
 app.post('/api/chat', async (req, res) => {
     try {
         const { message } = req.body;
         
-        // Check if we should generate PDF
-        if (conversationLog.length >= MESSAGE_THRESHOLD || message.toLowerCase() === 'סיכום') {
-            const pdfBuffer = await generatePDF();
-            await sendEmailWithPDF(pdfBuffer);
-        }
+        // Add message to conversation log
+        conversationLog.push({
+            message,
+            isSystem: false,
+            timestamp: new Date().toISOString()
+        });
 
         // Route through agentController first
         const agentResponse = await handleUserMessage(message);
         
         // If agentController handled the message, return its response
         if (agentResponse !== null) {
+            // Add response to conversation log
+            conversationLog.push({
+                message: agentResponse,
+                isSystem: true,
+                timestamp: new Date().toISOString()
+            });
             return res.json({ reply: agentResponse });
         }
 
@@ -135,8 +103,18 @@ app.post('/api/chat', async (req, res) => {
             max_tokens: 500
         });
 
+        const aiResponse = completion.choices[0].message.content;
+        
+        // Add AI response to conversation log
+        conversationLog.push({
+            message: aiResponse,
+            isSystem: true,
+            timestamp: new Date().toISOString()
+        });
+
         res.json({ 
-            reply: completion.choices[0].message.content 
+            reply: aiResponse,
+            shouldGeneratePDF: conversationLog.length >= MESSAGE_THRESHOLD || message.toLowerCase() === 'סיכום'
         });
     } catch (error) {
         console.error('Error:', error);

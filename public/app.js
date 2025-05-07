@@ -143,10 +143,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             
             if (data.error) {
-                console.error('OpenAI/Server error:', data.error); // Log actual error
+                console.error('OpenAI/Server error:', data.error);
                 addMessage('אירעה שגיאה בעת עיבוד הבקשה שלך. אנא נסה שוב.', true);
             } else {
                 addMessage(data.reply, true);
+                
+                // Check if we should generate PDF
+                if (data.shouldGeneratePDF) {
+                    await generatePDF();
+                }
             }
         } catch (error) {
             // Remove typing feedback on error
