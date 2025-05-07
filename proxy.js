@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
-const { google } = require('googleapis');
 const fs = require('fs');
 const { handleUserMessage } = require('./agentController');
 import emailjs from 'emailjs-com';
