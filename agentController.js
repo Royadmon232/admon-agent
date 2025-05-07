@@ -82,21 +82,36 @@ function isVehicleQuery(message) {
     return vehicleKeywords.some(keyword => message.includes(keyword));
 }
 
+// Enhance Doni's response to be more persuasive and professional
+function enhanceResponse(response) {
+    const persuasivePhrases = [
+        "אני כאן כדי לעזור לך בכל שאלה.",
+        "בוא נבדוק איך אפשר להפיק לך הצעה מותאמת.",
+        "אני ממליץ לבדוק את האפשרויות המיוחדות שלנו.",
+        "תוכל להרוויח מהצעות משתלמות במיוחד.",
+        "אשמח לעזור לך למצוא את הפתרון הטוב ביותר עבורך."
+    ];
+    
+    // Randomly select a persuasive phrase to append
+    const randomPhrase = persuasivePhrases[Math.floor(Math.random() * persuasivePhrases.length)];
+    return `${response} ${randomPhrase}`;
+}
+
 // Main function to determine which tool to use
 export async function handleUserMessage(message) {
     // Check for vehicle-related queries
     if (isVehicleQuery(message)) {
         const licensePlate = extractLicensePlate(message);
         if (licensePlate) {
-            return await fetchVehicleData(licensePlate);
+            const vehicleData = await getVehicleInfoByPlate(licensePlate);
+            return enhanceResponse(vehicleData);
         } else {
-            return 'לא הצלחתי לזהות את מספר הרכב. נסה לכתוב רק את המספר.';
+            return enhanceResponse('לא הצלחתי לזהות את מספר הרכב. נסה לכתוב רק את המספר.');
         }
-    } else if (message.includes('quote')) {
-        return calculateInsuranceQuote({ age: 30, car: 'Toyota' }); // Example user data
-    } else if (message.includes('coverage')) {
-        return explainCoverage('basic'); // Example coverage type
+    } else if (message.includes('הצעת מחיר')) {
+        return enhanceResponse(calculateInsuranceQuote({ age: 30, car: 'Toyota' })); // Example user data
     } else {
+        // Fallback to OpenAI for other queries
         return null; // Return null to indicate this should be handled by OpenAI
     }
 } 

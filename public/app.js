@@ -13,6 +13,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // API endpoint configuration
     const API_URL = 'https://admon-agent.onrender.com/api/chat';
 
+    // Initialize session memory
+    const sessionMemory = {
+        driverAge: null,
+        driverGender: null,
+        vehicleNumber: null
+    };
+
+    // Function to update session memory
+    function updateSessionMemory(message) {
+        const ageMatch = message.match(/גיל הנהג הוא (\d+)/);
+        const genderMatch = message.match(/מין הנהג הוא (זכר|נקבה)/);
+        const vehicleMatch = message.match(/מספר רכב הוא (\d{7,8})/);
+
+        if (ageMatch) sessionMemory.driverAge = ageMatch[1];
+        if (genderMatch) sessionMemory.driverGender = genderMatch[1];
+        if (vehicleMatch) sessionMemory.vehicleNumber = vehicleMatch[1];
+    }
+
     // Function to send email with PDF (as base64 attachment)
     async function sendEmailWithPDF(pdfBlob) {
         try {
@@ -113,6 +131,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const message = userInput.value.trim();
         if (!message) return;
 
+        // Update session memory
+        updateSessionMemory(message);
+
         // Add user message to chat
         addMessage(message);
         userInput.value = '';
@@ -127,31 +148,47 @@ document.addEventListener('DOMContentLoaded', () => {
         chatMessages.scrollTop = chatMessages.scrollHeight;
 
         try {
-            const response = await fetch(API_URL, {
+            // First, try to handle the message with agentController
+            const agentResponse = await fetch('/api/agent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ message }),
+                body: JSON.stringify({ message, sessionMemory }),
             });
+
+            const agentData = await agentResponse.json();
+
+            if (agentData.reply) {
+                addMessage(agentData.reply, true);
+            } else {
+                // If agentController returns null, fallback to OpenAI
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message, sessionMemory }),
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('OpenAI/Server error:', data.error);
+                    addMessage('אירעה שגיאה בעת עיבוד הבקשה שלך. אנא נסה שוב.', true);
+                } else {
+                    addMessage(data.reply, true);
+
+                    // Check if we should generate PDF
+                    if (data.shouldGeneratePDF) {
+                        await generatePDF();
+                    }
+                }
+            }
 
             // Remove typing feedback
             if (typingDiv && typingDiv.parentNode) {
                 typingDiv.parentNode.removeChild(typingDiv);
-            }
-
-            const data = await response.json();
-            
-            if (data.error) {
-                console.error('OpenAI/Server error:', data.error);
-                addMessage('אירעה שגיאה בעת עיבוד הבקשה שלך. אנא נסה שוב.', true);
-            } else {
-                addMessage(data.reply, true);
-                
-                // Check if we should generate PDF
-                if (data.shouldGeneratePDF) {
-                    await generatePDF();
-                }
             }
         } catch (error) {
             // Remove typing feedback on error
