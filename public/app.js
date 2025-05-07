@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     to_email: "royadmon23@gmail.com",
                     subject: "Insurance Summary from Doni",
                     message: "Attached is your conversation summary with Doni, your AI insurance agent.",
-                    attachments: [
+                    attachment: [
                         {
                             name: "insurance_summary.pdf",
                             type: "application/pdf",
