@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const MESSAGE_THRESHOLD = 10;
 
     // Initialize EmailJS
-    emailjs.init("YOUR_PUBLIC_KEY"); // Replace with your EmailJS public key
+    emailjs.init("bmjjh75db3mmHuq5H");
 
     // Function to send email with PDF
     async function sendEmailWithPDF(pdfBlob) {
@@ -17,8 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('pdf', pdfBlob, 'insurance_summary.pdf');
 
             const response = await emailjs.send(
-                "YOUR_SERVICE_ID", // Replace with your EmailJS service ID
-                "YOUR_TEMPLATE_ID", // Replace with your EmailJS template ID
+                "service_fidvxmm",
+                "template_0svkc5i",
                 {
                     to_email: "royadmon23@gmail.com",
                     subject: "Insurance Summary from Doni",
