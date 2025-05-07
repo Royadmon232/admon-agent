@@ -143,7 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             
             if (data.error) {
-                addMessage('Sorry, there was an error processing your request. Please try again.', true);
+                console.error('OpenAI/Server error:', data.error); // Log actual error
+                addMessage('אירעה שגיאה בעת עיבוד הבקשה שלך. אנא נסה שוב.', true);
             } else {
                 addMessage(data.reply, true);
             }
