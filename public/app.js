@@ -13,11 +13,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // API endpoint configuration
     const API_URL = 'https://admon-agent.onrender.com/api/chat';
 
-    // Function to send email with PDF
+    // Function to send email with PDF (as base64 attachment)
     async function sendEmailWithPDF(pdfBlob) {
         try {
-            const formData = new FormData();
-            formData.append('pdf', pdfBlob, 'insurance_summary.pdf');
+            // Convert blob to base64
+            const toBase64 = blob => new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+            const base64PDF = await toBase64(pdfBlob);
 
             const response = await emailjs.send(
                 "service_fidvxmm",
@@ -26,7 +32,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     to_email: "royadmon23@gmail.com",
                     subject: "Insurance Summary from Doni",
                     message: "Attached is your conversation summary with Doni, your AI insurance agent.",
-                    pdf: pdfBlob
+                    // EmailJS expects an array of attachments
+                    attachments: [
+                        {
+                            name: "insurance_summary.pdf",
+                            data: base64PDF
+                        }
+                    ]
                 }
             );
 
@@ -104,6 +116,15 @@ document.addEventListener('DOMContentLoaded', () => {
         addMessage(message);
         userInput.value = '';
 
+        // Show Doni typing feedback
+        let typingDiv = document.createElement('div');
+        typingDiv.className = 'message system typing-feedback';
+        let typingP = document.createElement('p');
+        typingP.textContent = 'דוני מקליד...';
+        typingDiv.appendChild(typingP);
+        chatMessages.appendChild(typingDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
         try {
             const response = await fetch(API_URL, {
                 method: 'POST',
@@ -113,6 +134,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ message }),
             });
 
+            // Remove typing feedback
+            if (typingDiv && typingDiv.parentNode) {
+                typingDiv.parentNode.removeChild(typingDiv);
+            }
+
             const data = await response.json();
             
             if (data.error) {
@@ -121,6 +147,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 addMessage(data.reply, true);
             }
         } catch (error) {
+            // Remove typing feedback on error
+            if (typingDiv && typingDiv.parentNode) {
+                typingDiv.parentNode.removeChild(typingDiv);
+            }
             console.error('Error:', error);
             addMessage('Sorry, there was an error connecting to the server. Please try again.', true);
         }
