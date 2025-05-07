@@ -32,11 +32,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     to_email: "royadmon23@gmail.com",
                     subject: "Insurance Summary from Doni",
                     message: "Attached is your conversation summary with Doni, your AI insurance agent.",
-                    // EmailJS expects an array of attachments
                     attachments: [
                         {
                             name: "insurance_summary.pdf",
-                            data: base64PDF
+                            type: "application/pdf",
+                            content: base64PDF,
+                            encoding: "base64"
                         }
                     ]
                 }
