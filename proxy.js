@@ -4,7 +4,7 @@ const OpenAI = require('openai');
 const { google } = require('googleapis');
 const fs = require('fs');
 const { handleUserMessage } = require('./agentController');
-const emailjs = require('emailjs-com');
+import emailjs from 'emailjs-com';
 
 // Initialize Express app
 const app = express();
@@ -20,7 +20,7 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
-// Initialize EmailJS
+// Initialize EmailJS with Public Key
 emailjs.init('bmjjh75db3mmHuq5H');
 
 // Use environment variables for credentials
