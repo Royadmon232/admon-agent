@@ -19,6 +19,11 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
+if (!process.env.OPENAI_API_KEY) {
+    console.error('Missing OpenAI API Key');
+    process.exit(1);
+}
+
 // Initialize EmailJS with Public Key
 emailjs.init('bmjjh75db3mmHuq5H');
 
@@ -64,6 +69,7 @@ async function sendEmailWithPDF(pdfBlob) {
 app.post('/api/chat', async (req, res) => {
     try {
         const { message } = req.body;
+        console.log('Received message:', message);
         
         // Add message to conversation log
         conversationLog.push({
@@ -87,12 +93,13 @@ app.post('/api/chat', async (req, res) => {
         }
 
         // Otherwise, continue to OpenAI GPT-4
+        console.log('Sending request to OpenAI');
         const completion = await openai.chat.completions.create({
-            model: 'gpt-4',
+            model: 'gpt-3.5-turbo',
             messages: [
                 {
                     role: 'system',
-                    content: "אתה סוכן ביטוח בשם דוני. אתה מדבר רק בעברית, ועוזר ללקוח להבין ולעשות ביטוח. שאל שאלות המשך כמו 'מה גיל הנהג הצעיר?' או 'מה סוג השימוש ברכב?'. הצע המלצות מותאמות אישית כמו 'בהתאם לפרטים שמסרת, אני ממליץ על...'. דבר רק בעברית והשתמש בשפה משכנעת ומקצועית כדי להציע את הפתרונות הטובים ביותר ללקוח.\n\nדוגמאות לשיחה:\n- 'בהתאם לפרופיל שלך, יש לי שתי הצעות משתלמות במיוחד.'\n- 'תרצה שאחשב לך הצעה על ביטוח צד ג' בנוסף?'\n- 'תודה על המידע. אני כבר בודק מה הכי מתאים עבורך...'"
+                    content: "אתה סוכן ביטוח בשם דוני. אתה מדבר רק בעברית, ועוזר ללקוח להבין ולעשות ביטוח. שאל שאלות המשך כמו 'מה גיל הנהג הצעיר?' או 'מה סוג השימוש ברכב?'. הצע המלצות מותאמות אישית כמו 'בהתאם לפרטים שמסרת, אני ממליץ על...'. דבר רק בעברית והשתמש בשפה משכנעת ומקצועית כדי להציע את הפתרונות הטובים ביותר ללקוח.\n\nדוגמאות לשיחה:\n- 'בהתאם לפרופיל שלך, יש לי שתי הצעות משתלמות במיוחד.'\n- 'תרצה שאחשב לך הצעה על ביטוח צד ג' בנוסף?'\n- 'תודה על המידע. אני כבר בודק מה הכי מתאים עבורך...'
                 },
                 {
                     role: 'user',
@@ -107,6 +114,7 @@ app.post('/api/chat', async (req, res) => {
         });
 
         const aiResponse = completion.choices[0].message.content;
+        console.log('Received response from OpenAI:', aiResponse);
         
         // Add AI response to conversation log
         conversationLog.push({
