@@ -101,6 +101,9 @@ app.post('/api/chat', async (req, res) => {
             ],
             temperature: 0.7,
             max_tokens: 500
+        }).catch(error => {
+            console.error('OpenAI API error:', error);
+            throw new Error('Failed to connect to OpenAI API');
         });
 
         const aiResponse = completion.choices[0].message.content;

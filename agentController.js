@@ -105,20 +105,25 @@ function enhanceResponse(response) {
 
 // Main function to determine which tool to use
 export async function handleUserMessage(message) {
-    // Check for vehicle-related queries
-    if (isVehicleQuery(message)) {
-        const licensePlate = extractLicensePlate(message);
-        if (licensePlate) {
-            const vehicleData = await getVehicleInfoByPlate(licensePlate);
-            return enhanceResponse(vehicleData);
+    try {
+        // Check for vehicle-related queries
+        if (isVehicleQuery(message)) {
+            const licensePlate = extractLicensePlate(message);
+            if (licensePlate) {
+                const vehicleData = await getVehicleInfoByPlate(licensePlate);
+                return enhanceResponse(vehicleData);
+            } else {
+                return enhanceResponse('לא הצלחתי לזהות את מספר הרכב. נסה לכתוב רק את המספר.');
+            }
+        } else if (message.includes('הצעת מחיר')) {
+            return enhanceResponse(calculateInsuranceQuote({ age: 30, car: 'Toyota' })); // Example user data
         } else {
-            return enhanceResponse('לא הצלחתי לזהות את מספר הרכב. נסה לכתוב רק את המספר.');
+            // Fallback to OpenAI for other queries
+            return null; // Return null to indicate this should be handled by OpenAI
         }
-    } else if (message.includes('הצעת מחיר')) {
-        return enhanceResponse(calculateInsuranceQuote({ age: 30, car: 'Toyota' })); // Example user data
-    } else {
-        // Fallback to OpenAI for other queries
-        return null; // Return null to indicate this should be handled by OpenAI
+    } catch (error) {
+        console.error('Error handling user message:', error);
+        throw error;
     }
 }
 
