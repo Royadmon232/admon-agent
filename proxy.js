@@ -1,8 +1,8 @@
-const express = require('express');
-const cors = require('cors');
-const OpenAI = require('openai');
-const fs = require('fs');
-const { handleUserMessage } = require('./agentController');
+import express from 'express';
+import cors from 'cors';
+import OpenAI from 'openai';
+import fs from 'fs';
+import { handleUserMessage } from './agentController';
 import emailjs from 'emailjs-com';
 
 // Initialize Express app

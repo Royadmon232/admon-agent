@@ -1,6 +1,6 @@
 // Simulated agent system
 
-const axios = require('axios');
+import axios from 'axios';
 
 // Mock functions representing different tools
 async function fetchVehicleData(licensePlate) {
