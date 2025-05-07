@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import OpenAI from 'openai';
 import fs from 'fs';
-import { handleUserMessage } from './agentController';
+import { handleUserMessage } from './agentController.js';
 import emailjs from 'emailjs-com';
 
 // Initialize Express app
@@ -21,23 +21,6 @@ const openai = new OpenAI({
 
 // Initialize EmailJS with Public Key
 emailjs.init('bmjjh75db3mmHuq5H');
-
-// Use environment variables for credentials
-const credentials = {
-    client_email: process.env.CLIENT_EMAIL,
-    private_key: process.env.PRIVATE_KEY.replace(/\\n/g, '\n'),
-};
-
-const { client_secret, client_id, redirect_uris } = credentials;
-const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
-
-// Set the token for the OAuth2 client
-// You need to generate this token manually and store it securely
-const TOKEN_PATH = 'token.json';
-fs.readFile(TOKEN_PATH, (err, token) => {
-    if (err) return console.error('Error loading token:', err);
-    oAuth2Client.setCredentials(JSON.parse(token));
-});
 
 // Function to send email with PDF using EmailJS
 async function sendEmailWithPDF(pdfBuffer) {
