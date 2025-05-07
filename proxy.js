@@ -19,9 +19,13 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
-// Load client secrets from a local file.
-const credentials = JSON.parse(fs.readFileSync('credentials.json'));
-const { client_secret, client_id, redirect_uris } = credentials.installed;
+// Use environment variables for credentials
+const credentials = {
+    client_email: process.env.CLIENT_EMAIL,
+    private_key: process.env.PRIVATE_KEY.replace(/\\n/g, '\n'),
+};
+
+const { client_secret, client_id, redirect_uris } = credentials;
 const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
 
 // Set the token for the OAuth2 client
