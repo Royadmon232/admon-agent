@@ -38,46 +38,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Function to generate PDF
     async function generatePDF() {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        // Add title
-        doc.setFontSize(20);
-        doc.text('Insurance Conversation Summary', 20, 20);
-        
-        // Add timestamp
-        doc.setFontSize(12);
-        doc.text(`Generated on: ${new Date().toLocaleString()}`, 20, 30);
-        
-        // Add conversation
-        doc.setFontSize(11);
-        let yPosition = 45;
-        
-        conversationLog.forEach((entry, index) => {
-            const prefix = entry.isSystem ? 'Assistant: ' : 'You: ';
-            const text = `${prefix}${entry.message}`;
-            
-            // Split text into lines that fit the page width
-            const splitText = doc.splitTextToSize(text, 170);
-            
-            // Check if we need a new page
-            if (yPosition + splitText.length * 7 > 280) {
-                doc.addPage();
-                yPosition = 20;
-            }
-            
-            doc.text(splitText, 20, yPosition);
-            yPosition += splitText.length * 7 + 5;
+        // Build the conversation HTML for PDF
+        let html = `<h2 style="font-family: Arial, 'Noto Sans Hebrew', sans-serif;">Insurance Conversation Summary</h2>`;
+        html += `<div>Generated on: ${new Date().toLocaleString()}</div><br>`;
+        conversationLog.forEach(entry => {
+            const prefix = entry.isSystem ? 'Assistant:' : 'You:';
+            // Use dir="rtl" for Hebrew
+            html += `<div dir="rtl" style="margin-bottom:8px;"><b>${prefix}</b> ${entry.message}</div>`;
         });
-        
-        // Save the PDF and get it as a blob
-        const pdfBlob = doc.output('blob');
-        
+        document.getElementById('pdf-content').innerHTML = html;
+
+        // html2pdf options
+        const opt = {
+            margin:       0.5,
+            filename:     'insurance_summary.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2 },
+            jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+        };
+
+        // Generate PDF and get blob
+        const pdfBlob = await html2pdf().from(document.getElementById('pdf-content')).set(opt).outputPdf('blob');
+
         // Send email with PDF
         await sendEmailWithPDF(pdfBlob);
-        
+
         // Also save locally
-        doc.save('insurance_summary.pdf');
+        html2pdf().from(document.getElementById('pdf-content')).set(opt).save();
     }
 
     // Function to add a message to the chat
