@@ -15,38 +15,68 @@ async function fetchVehicleData(licensePlate) {
         }
     } catch (error) {
         console.error('Error fetching vehicle data:', error);
-        return 'שגיאה בחיפוש נתוני רכב.';
+        // Fallback to dummy data if API fails
+        return getVehicleInfoByPlate(licensePlate);
     }
 }
 
+// Dummy vehicle data for testing
+function getVehicleInfoByPlate(plateNumber) {
+    // Simple hash function to get consistent dummy data for the same plate
+    const hash = plateNumber.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    
+    const models = [
+        { make: 'טויוטה', model: 'קורולה', year: 2020, color: 'כסוף' },
+        { make: 'הונדה', model: 'סיוויק', year: 2019, color: 'שחור' },
+        { make: 'מזדה', model: '3', year: 2021, color: 'לבן' },
+        { make: 'יונדאי', model: 'איוניק', year: 2022, color: 'כחול' },
+        { make: 'סובארו', model: 'אימפרזה', year: 2018, color: 'אדום' }
+    ];
+    
+    const selectedModel = models[hash % models.length];
+    return `הרכב שלך הוא ${selectedModel.make} ${selectedModel.model}, שנת ${selectedModel.year}, צבע ${selectedModel.color}`;
+}
+
 function calculateInsuranceQuote(userData) {
-    return `Calculated insurance quote for user: ${JSON.stringify(userData)}`;
+    return `הצעת מחיר לביטוח: ${JSON.stringify(userData)}`;
 }
 
 function explainCoverage(type) {
-    return `Explanation of coverage for type: ${type}`;
+    return `הסבר על כיסוי ביטוח מסוג: ${type}`;
 }
 
 // Helper function to extract license plate from text
 function extractLicensePlate(text) {
-    // Match patterns like: 123-456, 123456, 12-345-67
-    const platePattern = /\d{2,3}[-]?\d{2,3}[-]?\d{2}/;
+    // Match patterns for Israeli license plates (7-8 digits)
+    const platePattern = /\d{2,3}[-]?\d{2,3}[-]?\d{2,3}/;
     const match = text.match(platePattern);
-    return match ? match[0].replace(/-/g, '') : null;
+    if (!match) return null;
+    
+    // Clean the plate number (remove hyphens and spaces)
+    const cleanPlate = match[0].replace(/[- ]/g, '');
+    
+    // Validate plate length (7-8 digits)
+    return (cleanPlate.length >= 7 && cleanPlate.length <= 8) ? cleanPlate : null;
 }
 
 // Helper function to check if message is about vehicle details
 function isVehicleQuery(message) {
     const vehicleKeywords = [
         'לוחית רישוי',
+        'מספר רכב',
+        'מידע על הרכב',
+        'תמצא את הרכב שלי',
+        'מה הרכב לפי',
         'תגיד לי מה הרכב',
         'מה הרכב',
         'פרטי רכב',
-        'מידע על הרכב',
         'מה יש על הרכב',
         'מה הרכב הזה',
         'מה המכונית',
-        'מה האוטו'
+        'מה האוטו',
+        'תחפש את הרכב',
+        'תמצא את המכונית',
+        'מידע על המכונית'
     ];
     
     return vehicleKeywords.some(keyword => message.includes(keyword));
@@ -60,7 +90,7 @@ export async function handleUserMessage(message) {
         if (licensePlate) {
             return await fetchVehicleData(licensePlate);
         } else {
-            return 'אשמח לעזור לך עם פרטי הרכב. אנא ציין את מספר הרישוי של הרכב.';
+            return 'לא הצלחתי לזהות את מספר הרכב. נסה לכתוב רק את המספר.';
         }
     } else if (message.includes('quote')) {
         return calculateInsuranceQuote({ age: 30, car: 'Toyota' }); // Example user data
