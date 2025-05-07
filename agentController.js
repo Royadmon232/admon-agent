@@ -28,7 +28,7 @@ function explainCoverage(type) {
 }
 
 // Main function to determine which tool to use
-function handleUserMessage(message) {
+export function handleUserMessage(message) {
     if (message.includes('vehicle')) {
         return fetchVehicleData('123-456'); // Example license plate
     } else if (message.includes('quote')) {
@@ -36,9 +36,6 @@ function handleUserMessage(message) {
     } else if (message.includes('coverage')) {
         return explainCoverage('basic'); // Example coverage type
     } else {
-        return 'Sorry, I did not understand your request.';
+        return 'מצטער, לא הבנתי את הבקשה שלך.'; // Translated to Hebrew
     }
-}
-
-// Export the main function
-module.exports = { handleUserMessage }; 
+} 

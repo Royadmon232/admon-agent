@@ -83,7 +83,7 @@ app.post('/api/chat', async (req, res) => {
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ 
-            error: 'An error occurred while processing your request' 
+            error: 'אירעה שגיאה בעת עיבוד הבקשה שלך' // Translated to Hebrew
         });
     }
 });
