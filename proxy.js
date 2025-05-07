@@ -22,6 +22,10 @@ const openai = new OpenAI({
 // Initialize EmailJS with Public Key
 emailjs.init('bmjjh75db3mmHuq5H');
 
+// Conversation log and message threshold for PDF/email logic
+let conversationLog = [];
+const MESSAGE_THRESHOLD = 10;
+
 // Function to send email with PDF using EmailJS
 async function sendEmailWithPDF(pdfBuffer) {
     try {
