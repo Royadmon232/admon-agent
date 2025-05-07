@@ -24,6 +24,8 @@ if (!process.env.OPENAI_API_KEY) {
     process.exit(1);
 }
 
+console.log('OpenAI API Key:', process.env.OPENAI_API_KEY ? 'Loaded' : 'Not Loaded');
+
 // Initialize EmailJS with Public Key
 emailjs.init('bmjjh75db3mmHuq5H');
 
@@ -133,6 +135,11 @@ app.post('/api/chat', async (req, res) => {
             error: 'אירעה שגיאה בעת עיבוד הבקשה שלך' // Translated to Hebrew
         });
     }
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+    res.json({ status: "ok" });
 });
 
 // Start server
