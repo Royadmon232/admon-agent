@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize EmailJS
     emailjs.init("bmjjh75db3mmHuq5H");
 
+    // API endpoint configuration
+    const API_URL = 'https://admon-agent.onrender.com/api/chat';
+
     // Function to send email with PDF
     async function sendEmailWithPDF(pdfBlob) {
         try {
@@ -115,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
         userInput.value = '';
 
         try {
-            const response = await fetch('/api/chat', {
+            const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -128,7 +131,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.error) {
                 addMessage('Sorry, there was an error processing your request. Please try again.', true);
             } else {
-                addMessage(data.response, true);
+                addMessage(data.reply, true);
             }
         } catch (error) {
             console.error('Error:', error);
