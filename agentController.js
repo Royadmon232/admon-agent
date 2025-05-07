@@ -1,8 +1,22 @@
 // Simulated agent system
 
+const axios = require('axios');
+
 // Mock functions representing different tools
-function fetchVehicleData(licensePlate) {
-    return `Fetched data for vehicle with license plate: ${licensePlate}`;
+async function fetchVehicleData(licensePlate) {
+    try {
+        const response = await axios.get(`https://data.gov.il/api/3/action/datastore_search?resource_id=053ea72f-8bc0-4b7e-bc78-42cfc97bd0cd&q=${licensePlate}`);
+        const records = response.data.result.records;
+        if (records && records.length > 0) {
+            const { tozeret_nm, degem_nm, shnat_yitzur, sug_delek_nm } = records[0];
+            return `רכב: ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}`;
+        } else {
+            return 'לא נמצא רכב עם מספר רישוי כזה במאגר.';
+        }
+    } catch (error) {
+        console.error('Error fetching vehicle data:', error);
+        return 'שגיאה בחיפוש נתוני רכב.';
+    }
 }
 
 function calculateInsuranceQuote(userData) {
