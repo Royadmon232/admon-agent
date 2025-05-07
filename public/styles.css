@@ -268,4 +268,66 @@ header p {
     .right-column {
         margin-top: 2rem;
     }
+}
+
+#dashboard {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    text-align: center;
+}
+
+#sessions-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+#sessions-table th, #sessions-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+}
+
+#sessions-table th {
+    background-color: #f2f2f2;
+}
+
+#export-btn {
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+#export-btn:hover {
+    background-color: #45a049;
+}
+
+@media screen and (max-width: 600px) {
+    #sessions-table, #sessions-table th, #sessions-table td {
+        display: block;
+        width: 100%;
+    }
+
+    #sessions-table th {
+        display: none;
+    }
+
+    #sessions-table td {
+        text-align: right;
+        position: relative;
+        padding-left: 50%;
+    }
+
+    #sessions-table td:before {
+        content: attr(data-label);
+        position: absolute;
+        left: 0;
+        width: 50%;
+        padding-left: 10px;
+        font-weight: bold;
+        text-align: left;
+    }
 } 

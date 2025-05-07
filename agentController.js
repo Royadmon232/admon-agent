@@ -1,6 +1,12 @@
 // Simulated agent system
 
 import axios from 'axios';
+import sqlite3 from 'sqlite3';
+import { open } from 'sqlite';
+import express from 'express';
+import fs from 'fs';
+
+const router = express.Router();
 
 // Mock functions representing different tools
 async function fetchVehicleData(licensePlate) {
@@ -114,4 +120,90 @@ export async function handleUserMessage(message) {
         // Fallback to OpenAI for other queries
         return null; // Return null to indicate this should be handled by OpenAI
     }
-} 
+}
+
+// Open the database
+async function openDb() {
+    return open({
+        filename: './database.sqlite',
+        driver: sqlite3.Database
+    });
+}
+
+// Function to save session data
+export async function saveSessionData(sessionId, userName, plateNumber, vehicleData) {
+    const db = await openDb();
+    await db.run(
+        `INSERT INTO sessions (session_id, user_name, plate_number, vehicle_data, created_at) VALUES (?, ?, ?, ?, datetime('now'))`,
+        sessionId, userName, plateNumber, JSON.stringify(vehicleData)
+    );
+    await db.close();
+}
+
+// Function to retrieve session data
+export async function getSessionData(sessionId) {
+    const db = await openDb();
+    const session = await db.get(
+        `SELECT * FROM sessions WHERE session_id = ?`,
+        sessionId
+    );
+    await db.close();
+    return session;
+}
+
+// Function to retrieve all session data
+router.get('/dashboard', async (req, res) => {
+    const db = await openDb();
+    const sessions = await db.all('SELECT * FROM sessions');
+    await db.close();
+    res.json(sessions);
+});
+
+// Function to delete a session
+router.delete('/dashboard/:sessionId', async (req, res) => {
+    const { sessionId } = req.params;
+    const db = await openDb();
+    await db.run('DELETE FROM sessions WHERE session_id = ?', sessionId);
+    await db.close();
+    res.status(204).send();
+});
+
+// Function to export session data
+router.get('/dashboard/export', async (req, res) => {
+    const db = await openDb();
+    const sessions = await db.all('SELECT * FROM sessions');
+    await db.close();
+    res.setHeader('Content-Disposition', 'attachment; filename="sessions.json"');
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(sessions));
+});
+
+// Function to calculate the best insurance offer
+export async function calculateBestOffer(userDetails) {
+    const data = fs.readFileSync('insuranceRates.json');
+    const rates = JSON.parse(data);
+
+    const { age, gender, vehicleType } = userDetails;
+    let ageCategory;
+
+    if (age < 25) {
+        ageCategory = 'young';
+    } else if (age < 50) {
+        ageCategory = 'middle';
+    } else {
+        ageCategory = 'senior';
+    }
+
+    let bestOffer = { company: '', price: Infinity };
+
+    for (const company in rates) {
+        const price = rates[company][gender][ageCategory];
+        if (price < bestOffer.price) {
+            bestOffer = { company, price };
+        }
+    }
+
+    return `בהתאם לפרטים שסיפקת, ההצעה המשתלמת ביותר היא של חברת ${bestOffer.company} – ${bestOffer.price.toLocaleString()} ₪ בשנה`;
+}
+
+export default router; 

@@ -67,35 +67,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Function to generate PDF
-    async function generatePDF() {
-        // Build the conversation HTML for PDF
-        let html = `<h2 style="font-family: Arial, 'Noto Sans Hebrew', sans-serif;">Insurance Conversation Summary</h2>`;
-        html += `<div>Generated on: ${new Date().toLocaleString()}</div><br>`;
-        conversationLog.forEach(entry => {
-            const prefix = entry.isSystem ? 'Assistant:' : 'You:';
-            // Use dir="rtl" for Hebrew
-            html += `<div dir="rtl" style="margin-bottom:8px;"><b>${prefix}</b> ${entry.message}</div>`;
-        });
+    // Function to generate styled PDF
+    async function generateStyledPDF() {
+        // Build the styled HTML for PDF
+        let html = `
+            <div style="font-family: Arial, 'Noto Sans Hebrew', sans-serif;">
+                <img src="doni-logo.png" alt="Doni Logo" style="width: 100px;">
+                <h2>סיכום הצעת מחיר לביטוח</h2>
+                <p>נוצר בתאריך: ${new Date().toLocaleString()}</p>
+                <p>מספר רישוי: ${sessionMemory.vehicleNumber}</p>
+                <p>גיל הנהג: ${sessionMemory.driverAge}</p>
+                <p>מין הנהג: ${sessionMemory.driverGender}</p>
+                <p>תודה שבחרת בדוני לביטוח שלך!</p>
+            </div>
+        `;
         document.getElementById('pdf-content').innerHTML = html;
 
         // html2pdf options
         const opt = {
-            margin:       0.5,
-            filename:     'insurance_summary.pdf',
-            image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2 },
-            jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+            margin: 0.5,
+            filename: 'insurance_quote.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
         };
 
         // Generate PDF and get blob
         const pdfBlob = await html2pdf().from(document.getElementById('pdf-content')).set(opt).outputPdf('blob');
 
-        // Send email with PDF
-        await sendEmailWithPDF(pdfBlob);
-
-        // Also save locally
-        html2pdf().from(document.getElementById('pdf-content')).set(opt).save();
+        // Provide options for email or download
+        const userChoice = confirm('האם ברצונך לשלוח את ה-PDF למייל או להוריד אותו? לחץ על "אישור" לשליחה למייל או "ביטול" להורדה.');
+        if (userChoice) {
+            await sendEmailWithPDF(pdfBlob);
+        } else {
+            html2pdf().from(document.getElementById('pdf-content')).set(opt).save();
+        }
     }
 
     // Function to add a message to the chat
@@ -119,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Check if we should generate PDF
         if (conversationLog.length >= MESSAGE_THRESHOLD || 
             (content.toLowerCase() === 'סיכום' && !isSystem)) {
-            generatePDF();
+            generateStyledPDF();
         }
         
         // Scroll to bottom
@@ -148,22 +154,18 @@ document.addEventListener('DOMContentLoaded', () => {
         chatMessages.scrollTop = chatMessages.scrollHeight;
 
         try {
-            // First, try to handle the message with agentController
-            const agentResponse = await fetch('/api/agent', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ message, sessionMemory }),
-            });
-
-            const agentData = await agentResponse.json();
-
-            if (agentData.reply) {
-                addMessage(agentData.reply, true);
+            // Check if all required info is collected
+            if (sessionMemory.driverAge && sessionMemory.driverGender && sessionMemory.vehicleNumber) {
+                const userDetails = {
+                    age: parseInt(sessionMemory.driverAge),
+                    gender: sessionMemory.driverGender === 'זכר' ? 'male' : 'female',
+                    vehicleType: 'standard' // Assuming a default vehicle type for now
+                };
+                const bestOfferMessage = await calculateBestOffer(userDetails);
+                addMessage(bestOfferMessage, true);
             } else {
-                // If agentController returns null, fallback to OpenAI
-                const response = await fetch(API_URL, {
+                // Handle the message with agentController
+                const agentResponse = await fetch('/api/agent', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -171,17 +173,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({ message, sessionMemory }),
                 });
 
-                const data = await response.json();
+                const agentData = await agentResponse.json();
 
-                if (data.error) {
-                    console.error('OpenAI/Server error:', data.error);
-                    addMessage('אירעה שגיאה בעת עיבוד הבקשה שלך. אנא נסה שוב.', true);
+                if (agentData.reply) {
+                    addMessage(agentData.reply, true);
                 } else {
-                    addMessage(data.reply, true);
+                    // If agentController returns null, fallback to OpenAI
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ message, sessionMemory }),
+                    });
 
-                    // Check if we should generate PDF
-                    if (data.shouldGeneratePDF) {
-                        await generatePDF();
+                    const data = await response.json();
+
+                    if (data.error) {
+                        console.error('OpenAI/Server error:', data.error);
+                        addMessage('אירעה שגיאה בעת עיבוד הבקשה שלך. אנא נסה שוב.', true);
+                    } else {
+                        addMessage(data.reply, true);
+
+                        // Check if we should generate PDF
+                        if (data.shouldGeneratePDF) {
+                            await generateStyledPDF();
+                        }
                     }
                 }
             }
