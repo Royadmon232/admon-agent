@@ -17,11 +17,12 @@ async function fetchVehicleData(licensePlate) {
             const { tozeret_nm, degem_nm, shnat_yitzur, sug_delek_nm } = records[0];
             return `רכב: ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}`;
         } else {
+            // Return message if no records are found
             return 'לא נמצא רכב עם מספר רישוי כזה במאגר.';
         }
     } catch (error) {
         console.error('Error fetching vehicle data:', error);
-        // Fallback to dummy data if API fails
+        // Only fallback to dummy data if API call fails
         return getVehicleInfoByPlate(licensePlate);
     }
 }
