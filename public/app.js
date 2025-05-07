@@ -165,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 addMessage(bestOfferMessage, true);
             } else {
                 // Handle the message with agentController
-                const agentResponse = await fetch('/api/agent', {
+                const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -173,32 +173,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({ message, sessionMemory }),
                 });
 
-                const agentData = await agentResponse.json();
+                const data = await response.json();
 
-                if (agentData.reply) {
-                    addMessage(agentData.reply, true);
+                if (data.error) {
+                    console.error('OpenAI/Server error:', data.error);
+                    addMessage('אירעה שגיאה בעת עיבוד הבקשה שלך. אנא נסה שוב.', true);
                 } else {
-                    // If agentController returns null, fallback to OpenAI
-                    const response = await fetch(API_URL, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ message, sessionMemory }),
-                    });
+                    addMessage(data.reply, true);
 
-                    const data = await response.json();
-
-                    if (data.error) {
-                        console.error('OpenAI/Server error:', data.error);
-                        addMessage('אירעה שגיאה בעת עיבוד הבקשה שלך. אנא נסה שוב.', true);
-                    } else {
-                        addMessage(data.reply, true);
-
-                        // Check if we should generate PDF
-                        if (data.shouldGeneratePDF) {
-                            await generateStyledPDF();
-                        }
+                    // Check if we should generate PDF
+                    if (data.shouldGeneratePDF) {
+                        await generateStyledPDF();
                     }
                 }
             }
