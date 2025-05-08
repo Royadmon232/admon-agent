@@ -121,11 +121,9 @@ export async function handleUserMessage(message) {
                 // Check if the license plate was already processed
                 if (!processedPlates.has(licensePlate)) {
                     processedPlates.add(licensePlate);
-                    const vehicleData = await fetchVehicleData(licensePlate);
-                    return enhanceResponse(vehicleData);
-                } else {
-                    return enhanceResponse('המספר הזה כבר עובד.');
                 }
+                const vehicleData = await fetchVehicleData(licensePlate);
+                return enhanceResponse(vehicleData);
             } else {
                 return enhanceResponse('לא הצלחתי לזהות את מספר הרכב. נסה לכתוב רק את המספר.');
             }
