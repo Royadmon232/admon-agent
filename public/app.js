@@ -197,6 +197,9 @@ document.addEventListener('DOMContentLoaded', () => {
         addMessage(message);
         userInput.value = '';
 
+        // Ensure chat scrolls to the bottom
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
         // Show Doni typing feedback
         let typingDiv = document.createElement('div');
         typingDiv.className = 'message system typing-feedback';
@@ -226,6 +229,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     body: JSON.stringify({ message, sessionMemory }),
                 });
 
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+
                 const data = await response.json();
 
                 if (data.error) {
@@ -240,18 +247,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }
-
+        } catch (error) {
+            console.error('Error:', error);
+            addMessage('Sorry, there was an error connecting to the server. Please try again.', true);
+        } finally {
             // Remove typing feedback
             if (typingDiv && typingDiv.parentNode) {
                 typingDiv.parentNode.removeChild(typingDiv);
             }
-        } catch (error) {
-            // Remove typing feedback on error
-            if (typingDiv && typingDiv.parentNode) {
-                typingDiv.parentNode.removeChild(typingDiv);
-            }
-            console.error('Error:', error);
-            addMessage('Sorry, there was an error connecting to the server. Please try again.', true);
         }
     }
 
