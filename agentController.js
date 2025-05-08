@@ -8,6 +8,8 @@ import fs from 'fs';
 
 const router = express.Router();
 
+const processedPlates = new Set();
+
 // Mock functions representing different tools
 async function fetchVehicleData(licensePlate) {
     try {
