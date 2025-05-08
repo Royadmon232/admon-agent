@@ -4,6 +4,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const sendButton = document.getElementById('send-button');
     const themeToggle = document.getElementById('theme-toggle');
 
+    if (!sendButton) {
+        console.error("❌ sendButton not found in DOM");
+        return;
+    }
+
+    sendButton.addEventListener('click', () => {
+        console.log("✅ Send button clicked");
+        sendMessage();
+    });
+
     // Initialize conversation log
     const conversationLog = [];
     const MESSAGE_THRESHOLD = 10;
@@ -246,8 +256,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Event listeners
-    sendButton.addEventListener('click', sendMessage);
-
     userInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
