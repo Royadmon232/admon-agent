@@ -214,50 +214,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             // Check if all required info is collected
-            if (sessionMemory.driverAge && sessionMemory.driverGender && sessionMemory.vehicleNumber) {
-                const userDetails = {
-                    age: parseInt(sessionMemory.driverAge),
-                    gender: sessionMemory.driverGender === 'זכר' ? 'male' : 'female',
-                    vehicleType: 'standard' // Assuming a default vehicle type for now
-                };
-                const bestOfferMessage = await calculateBestOffer(userDetails);
-                addMessage(bestOfferMessage, true);
-            } else {
-                // Handle the message with agentController
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ message, sessionMemory }),
-                });
-
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-
-                const data = await response.json();
-
-                if (data.error) {
-                    console.error('OpenAI/Server error:', data.error);
-                    addMessage('אירעה שגיאה בעת עיבוד הבקשה שלך. אנא נסה שוב.', true);
-                } else {
-                    addMessage(data.reply, true);
-
-                    // Check if we should generate PDF
-                    if (data.shouldGeneratePDF) {
-                        await generateStyledPDF();
-                    }
-                }
+            if (!sessionMemory.driverAge) {
+                addMessage("מה גיל הנהג הצעיר ביותר ברכב?");
+                return;
             }
+            if (!sessionMemory.driverGender) {
+                addMessage("מה מין הנהג הראשי? (זכר/נקבה)");
+                return;
+            }
+            if (!sessionMemory.vehicleNumber) {
+                addMessage("מה מספר הרכב שלך?");
+                return;
+            }
+
+            const userDetails = {
+                age: parseInt(sessionMemory.driverAge),
+                gender: sessionMemory.driverGender === 'זכר' ? 'male' : 'female',
+                vehicleType: 'standard' // Assuming a default vehicle type for now
+            };
+            const bestOfferMessage = await calculateBestOffer(userDetails);
+            addMessage(bestOfferMessage, true);
         } catch (error) {
             console.error('Error:', error);
             addMessage('Sorry, there was an error connecting to the server. Please try again.', true);
-        } finally {
-            // Remove typing feedback
-            if (typingDiv && typingDiv.parentNode) {
-                typingDiv.parentNode.removeChild(typingDiv);
-            }
+        }
+        // Remove typing feedback
+        if (typingDiv && typingDiv.parentNode) {
+            typingDiv.parentNode.removeChild(typingDiv);
         }
     }
 
