@@ -14,18 +14,29 @@ const processedPlates = new Set();
 async function fetchVehicleData(licensePlate) {
     try {
         const filterQuery = encodeURIComponent(JSON.stringify({ mispar_rechev: licensePlate }));
-        const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&filters=${filterQuery}`;
+        const carUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&filters=${filterQuery}`;
+        const motorcycleUrl = `https://data.gov.il/api/3/action/datastore_search?resource_id=bf9df4e2-d90d-4c0a-a400-19e15af8e95f&filters=${filterQuery}`;
         
-        const response = await axios.get(url);
-        const records = response.data.result.records;
+        // Check car registry
+        let response = await axios.get(carUrl);
+        let records = response.data.result.records;
 
         if (records && records.length > 0) {
             const { tozeret_nm, degem_nm, shnat_yitzur, sug_delek_nm } = records[0];
             return `הרכב שלך הוא ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}.`;
-        } else {
-            console.log('🔍 No records found for plate:', licensePlate);
-            return 'לא נמצא רכב עם מספר רישוי כזה במאגר.';
         }
+
+        // Check motorcycle registry
+        response = await axios.get(motorcycleUrl);
+        records = response.data.result.records;
+
+        if (records && records.length > 0) {
+            const { tozeret_nm, degem_nm, shnat_yitzur, sug_delek_nm } = records[0];
+            return `האופנוע שלך הוא ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}.`;
+        }
+
+        console.log('🔍 No records found for plate:', licensePlate);
+        return 'לא נמצא רכב עם מספר רישוי כזה במאגר.';
     } catch (error) {
         console.error('❌ Error fetching vehicle data:', error);
         // Only fallback to dummy data if API call fails completely
