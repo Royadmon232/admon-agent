@@ -14,7 +14,7 @@ const processedPlates = new Set();
 async function fetchVehicleData(licensePlate) {
     try {
         const filterQuery = encodeURIComponent(JSON.stringify({ mispar_rechev: licensePlate }));
-        const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=053ea72f-8bc0-4b7e-bc78-42cfc97bd0cd&filters=${filterQuery}`;
+        const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=053cea08-09bc-40ec-8f7a-156f0677aff3&filters=${filterQuery}`;
         
         const response = await axios.get(url);
         const records = response.data.result.records;
