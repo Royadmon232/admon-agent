@@ -275,5 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadingScreen.style.display = 'none';
     }
 
-    themeToggle.addEventListener('click', toggleTheme);
+    if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
+    }
 }); 
