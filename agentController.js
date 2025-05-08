@@ -11,21 +11,26 @@ const router = express.Router();
 // Mock functions representing different tools
 async function fetchVehicleData(licensePlate) {
     try {
-        const response = await axios.get(`https://data.gov.il/api/3/action/datastore_search?resource_id=053ea72f-8bc0-4b7e-bc78-42cfc97bd0cd&q=${licensePlate}`);
+        const filterQuery = encodeURIComponent(JSON.stringify({ mispar_rechev: licensePlate }));
+        const url = `https://data.gov.il/api/3/action/datastore_search?resource_id=053ea72f-8bc0-4b7e-bc78-42cfc97bd0cd&filters=${filterQuery}`;
+        
+        const response = await axios.get(url);
         const records = response.data.result.records;
+
         if (records && records.length > 0) {
             const { tozeret_nm, degem_nm, shnat_yitzur, sug_delek_nm } = records[0];
-            return `רכב: ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}`;
+            return `הרכב שלך הוא ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}.`;
         } else {
-            // Return message if no records are found
+            console.log('🔍 No records found for plate:', licensePlate);
             return 'לא נמצא רכב עם מספר רישוי כזה במאגר.';
         }
     } catch (error) {
-        console.error('Error fetching vehicle data:', error);
-        // Only fallback to dummy data if API call fails
+        console.error('❌ Error fetching vehicle data:', error);
+        // Only fallback to dummy data if API call fails completely
         return getVehicleInfoByPlate(licensePlate);
     }
 }
+
 
 // Dummy vehicle data for testing
 function getVehicleInfoByPlate(plateNumber) {
@@ -111,7 +116,7 @@ export async function handleUserMessage(message) {
         if (isVehicleQuery(message)) {
             const licensePlate = extractLicensePlate(message);
             if (licensePlate) {
-                const vehicleData = await getVehicleInfoByPlate(licensePlate);
+                const vehicleData = await fetchVehicleData(licensePlate);
                 return enhanceResponse(vehicleData);
             } else {
                 return enhanceResponse('לא הצלחתי לזהות את מספר הרכב. נסה לכתוב רק את המספר.');

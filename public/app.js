@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatMessages = document.getElementById('chat-messages');
     const userInput = document.getElementById('user-input');
     const sendButton = document.getElementById('send-button');
+    const themeToggle = document.getElementById('theme-toggle');
 
     // Initialize conversation log
     const conversationLog = [];
@@ -20,6 +21,18 @@ document.addEventListener('DOMContentLoaded', () => {
         vehicleNumber: null
     };
 
+    // Load theme from localStorage
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.classList.add('dark-mode');
+    }
+
+    // Toggle theme
+    function toggleTheme() {
+        document.body.classList.toggle('dark-mode');
+        const theme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+        localStorage.setItem('theme', theme);
+    }
+
     // Function to update session memory
     function updateSessionMemory(message) {
         const ageMatch = message.match(/גיל הנהג הוא (\d+)/);
@@ -29,6 +42,15 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ageMatch) sessionMemory.driverAge = ageMatch[1];
         if (genderMatch) sessionMemory.driverGender = genderMatch[1];
         if (vehicleMatch) sessionMemory.vehicleNumber = vehicleMatch[1];
+
+        updateProgressBar();
+    }
+
+    function updateProgressBar() {
+        const totalSteps = 8;
+        const completedSteps = [sessionMemory.driverAge, sessionMemory.driverGender, sessionMemory.vehicleNumber].filter(Boolean).length;
+        const progressPercentage = (completedSteps / totalSteps) * 100;
+        document.querySelector('#progress-bar::after').style.width = `${progressPercentage}%`;
     }
 
     // Function to send email with PDF (as base64 attachment)
@@ -104,30 +126,51 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Clear conversation log at the start of a new session
+    conversationLog.length = 0;
+
     // Function to add a message to the chat
     function addMessage(content, isSystem = false) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${isSystem ? 'system' : 'user'}`;
-        
-        const messageP = document.createElement('p');
-        messageP.textContent = content;
-        
-        messageDiv.appendChild(messageP);
+
+        if (isSystem && content.includes('ההצעה המשתלמת ביותר')) {
+            const cardDiv = document.createElement('div');
+            cardDiv.className = 'insurance-card';
+            const [company, price] = content.match(/חברת (\S+) – (\d+,?\d*) ₪/).slice(1);
+            cardDiv.innerHTML = `<strong>${company}</strong><br><span class='highlight'>${price} ₪</span><br>${content}`;
+            messageDiv.appendChild(cardDiv);
+        } else {
+            if (isSystem) {
+                const avatar = document.createElement('img');
+                avatar.src = 'doni-logo.png';
+                avatar.alt = 'Doni Avatar';
+                avatar.className = 'system-avatar';
+                messageDiv.appendChild(avatar);
+            }
+            const messageP = document.createElement('p');
+            messageP.textContent = content;
+            messageDiv.appendChild(messageP);
+        }
+
         chatMessages.appendChild(messageDiv);
-        
+
         // Log the message
         conversationLog.push({
             message: content,
             isSystem: isSystem,
             timestamp: new Date().toISOString()
         });
-        
+
+        // Count only non-system messages
+        const userMessagesCount = conversationLog.filter(msg => !msg.isSystem).length;
+
         // Check if we should generate PDF
-        if (conversationLog.length >= MESSAGE_THRESHOLD || 
+        if (userMessagesCount >= MESSAGE_THRESHOLD || 
             (content.toLowerCase() === 'סיכום' && !isSystem)) {
             generateStyledPDF();
         }
-        
+
         // Scroll to bottom
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
@@ -214,4 +257,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Focus input on load
     userInput.focus();
+
+    // Hide loading screen once DOM content is loaded
+    const loadingScreen = document.getElementById('loading-screen');
+    if (loadingScreen) {
+        loadingScreen.style.display = 'none';
+    }
+
+    themeToggle.addEventListener('click', toggleTheme);
 }); 
