@@ -60,7 +60,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalSteps = 8;
         const completedSteps = [sessionMemory.driverAge, sessionMemory.driverGender, sessionMemory.vehicleNumber].filter(Boolean).length;
         const progressPercentage = (completedSteps / totalSteps) * 100;
-        document.querySelector('#progress-bar::after').style.width = `${progressPercentage}%`;
+        const progressBar = document.getElementById('progress-bar');
+        if (progressBar) {
+            progressBar.style.width = `${progressPercentage}%`;
+        }
     }
 
     // Function to send email with PDF (as base64 attachment)
