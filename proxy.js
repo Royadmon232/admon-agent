@@ -14,6 +14,10 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/public/landing.html');
+});
+
 
 // Initialize OpenAI
 const openai = new OpenAI({
