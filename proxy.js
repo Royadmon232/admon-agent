@@ -171,6 +171,11 @@ app.post('/api/admin-login', (req, res) => {
     });
 });
 
+// Serve landing.html at the root URL
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/public/landing.html');
+});
+
 // Start server
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
