@@ -1,7 +1,7 @@
 {
     "name": "Doni Insurance Agent",
     "short_name": "Doni",
-    "start_url": ".",
+    "start_url": "landing.html",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#2563eb",
