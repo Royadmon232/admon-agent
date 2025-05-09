@@ -1,13 +1,16 @@
 const CACHE_NAME = 'doni-cache-v1';
 const urlsToCache = [
-    '/',
+    '/landing.html',
     '/index.html',
+    '/dashboard.html',
     '/styles.css',
     '/app.js',
+    '/dashboard.js',
     '/manifest.json',
     '/icon-192x192.png',
     '/icon-512x512.png'
 ];
+
 
 self.addEventListener('install', event => {
     event.waitUntil(

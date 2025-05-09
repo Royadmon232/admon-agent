@@ -16,11 +16,14 @@
 }
 
 body {
-    font-family: 'Assistant', 'Inter', sans-serif;
-    background: linear-gradient(135deg, var(--background-start) 0%, var(--background-end) 100%);
-    color: var(--text-color);
-    line-height: 1.6;
-    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    text-align: center;
+    background-color: #f4f4f9;
+    font-family: 'Arial', sans-serif;
 }
 
 body.dark-mode {
@@ -602,4 +605,79 @@ header p {
 
 .hidden {
     display: none;
+}
+
+img {
+    max-width: 150px;
+    margin-bottom: 20px;
+}
+
+p {
+    font-size: 1.2em;
+    margin-bottom: 20px;
+    color: #333;
+}
+
+button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    margin: 10px;
+    border-radius: 5px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+#login-form {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#login-form label {
+    margin: 5px 0;
+    font-size: 1em;
+}
+
+#login-form input {
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    width: 200px;
+}
+
+#error-message {
+    color: red;
+    margin-top: 10px;
+}
+
+@media (max-width: 600px) {
+    body {
+        padding: 20px;
+    }
+
+    img {
+        max-width: 100px;
+    }
+
+    p {
+        font-size: 1em;
+    }
+
+    button {
+        padding: 8px 16px;
+        margin: 5px;
+    }
+
+    #login-form input {
+        width: 100%;
+    }
 } 
