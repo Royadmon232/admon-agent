@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import { handleUserMessage } from './agentController.js';
 import emailjs from 'emailjs-com';
+import sqlite3 from 'sqlite3';
 
 // Initialize Express app
 const app = express();
@@ -32,6 +33,15 @@ emailjs.init('bmjjh75db3mmHuq5H');
 // Conversation log and message threshold for PDF/email logic
 let conversationLog = [];
 const MESSAGE_THRESHOLD = 10;
+
+// Connect to SQLite database
+const db = new sqlite3.Database('dashboard.sqlite', (err) => {
+    if (err) {
+        console.error('Error opening database:', err);
+    } else {
+        console.log('Connected to the SQLite database.');
+    }
+});
 
 // Function to send email with PDF using EmailJS
 async function sendEmailWithPDF(pdfBlob) {
@@ -140,6 +150,25 @@ app.post('/api/chat', async (req, res) => {
 // Health check endpoint
 app.get('/api/health', (req, res) => {
     res.json({ status: "ok" });
+});
+
+// Admin login endpoint
+app.post('/api/admin-login', (req, res) => {
+    const { username, password } = req.body;
+    const query = 'SELECT * FROM admins WHERE username = ? AND password = ?';
+
+    db.get(query, [username, password], (err, row) => {
+        if (err) {
+            console.error('Database query error:', err);
+            return res.status(500).json({ success: false });
+        }
+
+        if (row) {
+            res.json({ success: true });
+        } else {
+            res.json({ success: false });
+        }
+    });
 });
 
 // Start server

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <title>דוני - סוכן ביטוח וירטואלי</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <img src="doni-logo.png" alt="Doni Logo">
+        <p>דוני הוא סוכן ביטוח וירטואלי חכם, המציע לך הצעות ביטוח בהתאמה אישית בצורה נוחה ומהירה.</p>
+        <button onclick="window.location.href='index.html'">התחל שיחה</button>
+        <button onclick="toggleLoginForm()">הכנס כמנהל</button>
+    </div>
+    <div id="login-form" style="display: none;">
+        <label for="username">שם משתמש:</label>
+        <input type="text" id="username" name="username"><br>
+        <label for="password">סיסמה:</label>
+        <input type="password" id="password" name="password"><br>
+        <button onclick="handleLogin()">התחבר</button>
+    </div>
+    <p id="error-message" style="color: red;"></p>
+    <script>
+        function toggleLoginForm() {
+            const form = document.getElementById('login-form');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function handleLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorMessage = document.getElementById('error-message');
+
+            try {
+                const response = await fetch('/api/admin-login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    window.location.href = 'dashboard.html';
+                } else {
+                    errorMessage.textContent = 'Login failed. Please try again.';
+                }
+            } catch (error) {
+                errorMessage.textContent = 'An error occurred. Please try again later.';
+            }
+        }
+    </script>
+</body>
+</html> 
