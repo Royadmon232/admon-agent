@@ -5,6 +5,12 @@ import fs from 'fs';
 import { handleUserMessage } from './agentController.js';
 import emailjs from 'emailjs-com';
 import sqlite3 from 'sqlite3';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 
 // Initialize Express app
 const app = express();
@@ -15,7 +21,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/public/landing.html');
+    res.sendFile(path.join(__dirname, 'public', 'landing.html'));
 });
 
 
