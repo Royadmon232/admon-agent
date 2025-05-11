@@ -5,7 +5,7 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import express from 'express';
 import fs from 'fs';
-import { startFlow } from './flow';
+import { startFlow } from './flow.js';
 
 const router = express.Router();
 
