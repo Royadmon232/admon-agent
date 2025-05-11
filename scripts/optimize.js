@@ -49,8 +49,6 @@ async function optimizeImages() {
             // Replace original with optimized version
             await fs.unlink(inputPath);
             await fs.rename(outputPath, inputPath);
-
-            console.log(`Optimized: ${file}`);
         } catch (error) {
             console.error(`Error optimizing ${file}:`, error);
         }
@@ -70,7 +68,6 @@ async function compressStaticFiles() {
             try {
                 const compressed = await gzipAsync(content, { level: config.compression.level });
                 await fs.writeFile(`${filePath}.gz`, compressed);
-                console.log(`Compressed: ${file}`);
             } catch (error) {
                 console.error(`Error compressing ${file}:`, error);
             }
@@ -80,18 +77,12 @@ async function compressStaticFiles() {
 
 // Main optimization function
 async function optimize() {
-    console.log('Starting optimization...');
-
     try {
         // Optimize images
-        console.log('Optimizing images...');
         await optimizeImages();
 
         // Compress static files
-        console.log('Compressing static files...');
         await compressStaticFiles();
-
-        console.log('Optimization complete!');
     } catch (error) {
         console.error('Optimization failed:', error);
         process.exit(1);

@@ -37,7 +37,6 @@ async function fetchVehicleData(licensePlate) {
             return `האופנוע שלך הוא ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}.`;
         }
 
-        console.log('🔍 No records found for plate:', licensePlate);
         return 'לא נמצא רכב עם מספר רישוי כזה במאגר.';
     } catch (error) {
         console.error('❌ Error fetching vehicle data:', error);

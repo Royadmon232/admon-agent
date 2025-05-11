@@ -100,8 +100,6 @@ function formatOptions(options) {
 
 // Function to start the flow
 function startFlow() {
-    console.log('ברוכים הבאים! איזה סוג ביטוח אתם מעוניינים?');
-    console.log(formatOptions(insuranceTypes));
     // Here you would typically handle user input to select insurance type
     // For demonstration, we'll assume the user selects 'חובה'
     const selectedType = 'חובה';
@@ -112,13 +110,6 @@ function startFlow() {
 function askQuestions(type) {
     const typeQuestions = questions[type];
     for (const q of typeQuestions) {
-        console.log(q.question);
-        
-        if (q.type === 'options') {
-            console.log('אנא בחר אחת מהאפשרויות הבאות:');
-            console.log(formatOptions(q.options));
-        }
-        
         // Here you would typically handle user input to collect answers
         // For demonstration, we'll assume the user answers appropriately
         let answer;
@@ -132,20 +123,15 @@ function askQuestions(type) {
         
         if (validateAnswer(q, answer)) {
             session[q.id] = answer;
-        } else {
-            console.log('תשובה לא תקינה, אנא נסה שוב');
-            // In a real implementation, you would loop back to ask the same question
         }
     }
     
-    console.log('תודה על המידע! נמשיך לחישוב המחיר.');
     // Pass the session data to the pricing module
     calculatePrice(session);
 }
 
 // Function to calculate price (placeholder)
 function calculatePrice(data) {
-    console.log('Calculating price with data:', data);
     // Here you would typically call the pricing module
 }
 

@@ -36,8 +36,6 @@ if (!process.env.OPENAI_API_KEY) {
     process.exit(1);
 }
 
-console.log('OpenAI API Key:', process.env.OPENAI_API_KEY ? 'Loaded' : 'Not Loaded');
-
 // Initialize EmailJS with Public Key
 emailjs.init('bmjjh75db3mmHuq5H');
 
@@ -49,8 +47,6 @@ const MESSAGE_THRESHOLD = 10;
 const db = new sqlite3.Database('dashboard.sqlite', (err) => {
     if (err) {
         console.error('Error opening database:', err);
-    } else {
-        console.log('Connected to the SQLite database.');
     }
 });
 
@@ -77,7 +73,6 @@ async function sendEmailWithPDF(pdfBlob) {
                 ]
             }
         );
-        console.log('Email sent successfully:', response);
     } catch (error) {
         console.error('Error sending email:', error);
     }
@@ -87,7 +82,6 @@ async function sendEmailWithPDF(pdfBlob) {
 app.post('/api/chat', async (req, res) => {
     try {
         const { message } = req.body;
-        console.log('Received message:', message);
         
         // Add message to conversation log
         conversationLog.push({
@@ -111,7 +105,6 @@ app.post('/api/chat', async (req, res) => {
         }
 
         // Otherwise, continue to OpenAI GPT-4
-        console.log('Sending request to OpenAI');
         const completion = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [
@@ -132,7 +125,6 @@ app.post('/api/chat', async (req, res) => {
         });
 
         const aiResponse = completion.choices[0].message.content;
-        console.log('Received response from OpenAI:', aiResponse);
         
         // Add AI response to conversation log
         conversationLog.push({
@@ -205,7 +197,6 @@ app.post('/api/contact-human', async (req, res) => {
             subject: 'New Lead for Insurance',
             message: `שם: ${name}, פרטי קשר: ${contact}, סוג ביטוח: ${insuranceType}`
         }).then(response => {
-            console.log('Email sent successfully:', response);
             res.json({ success: 'הפרטים נשלחו בהצלחה' });
         }).catch(error => {
             console.error('Error sending email:', error);

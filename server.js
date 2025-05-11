@@ -1,3 +1,9 @@
+// server.js
+// Main entry point for the Doni application
+// This file sets up the Express server, applies middleware, and defines API routes.
+// Ensure all environment variables are set in config.js or .env before starting the server.
+// For any changes, ensure backward compatibility and test thoroughly.
+
 import express from 'express';
 import compression from 'compression';
 import cors from 'cors';
@@ -6,6 +12,7 @@ import { securityHeaders, rateLimiter, validateApiKey, validateRequest } from '.
 import { startRequestTimer, endRequestTimer, logError, healthCheck } from './utils/monitoring.js';
 import { createBackup, cleanupOldBackups } from './utils/backup.js';
 import logger from './utils/monitoring.js';
+import { validateAndSanitizeInputs } from './middleware/inputValidation.js';
 
 const app = express();
 
@@ -37,6 +44,16 @@ app.use(express.static('public', {
 app.use('/api', validateApiKey, (req, res, next) => {
     // API routes will be added here
     next();
+});
+
+app.use('/api/contact-human', validateApiKey, validateAndSanitizeInputs, (req, res) => {
+    // Handle contact human logic
+    res.json({ message: 'Contact request received' });
+});
+
+app.use('/api/admin-login', validateApiKey, validateAndSanitizeInputs, (req, res) => {
+    // Handle admin login logic
+    res.json({ message: 'Admin login successful' });
 });
 
 // Health check endpoint
