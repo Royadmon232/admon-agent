@@ -5,10 +5,12 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import express from 'express';
 import fs from 'fs';
+import { startFlow } from './flow';
 
 const router = express.Router();
 
 const processedPlates = new Set();
+let activeQuoteSession = false;
 
 // Mock functions representing different tools
 async function fetchVehicleData(licensePlate) {
@@ -113,7 +115,10 @@ function isCarInsuranceQuery(message) {
         'I want car insurance',
         'תן לי הצעת מחיר',
         'ביטוח רכב',
-        'הצעת מחיר לביטוח רכב'
+        'הצעת מחיר לביטוח רכב',
+        'get a quote',
+        'car insurance',
+        'how much does it cost to insure'
     ];
     return carInsuranceKeywords.some(keyword => message.includes(keyword));
 }
@@ -136,9 +141,17 @@ function enhanceResponse(response) {
 // Main function to determine which tool to use
 export async function handleUserMessage(message) {
     try {
+        // Check if a quote session is active
+        if (activeQuoteSession) {
+            // Continue with the current quote flow
+            return 'אנחנו כבר בתהליך הצעת מחיר. אנא המשך עם השאלות.';
+        }
+
         // Check for car insurance queries
         if (isCarInsuranceQuery(message)) {
             // Trigger the question flow system
+            activeQuoteSession = true;
+            startFlow();
             return 'אני אעזור לך לקבל הצעת מחיר לביטוח רכב. בוא נתחיל עם כמה שאלות פשוטות.';
         }
         // Check for vehicle-related queries
@@ -163,6 +176,9 @@ export async function handleUserMessage(message) {
     } catch (error) {
         console.error('Error handling user message:', error);
         throw error;
+    } finally {
+        // Reset the session state if needed
+        activeQuoteSession = false;
     }
 }
 

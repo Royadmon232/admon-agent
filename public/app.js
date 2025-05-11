@@ -307,14 +307,23 @@ document.addEventListener('DOMContentLoaded', () => {
         // Ensure chat scrolls to the bottom
         chatMessages.scrollTop = chatMessages.scrollHeight;
 
-        // Show Doni typing feedback
-        let typingDiv = document.createElement('div');
-        typingDiv.className = 'message system typing-feedback';
-        let typingP = document.createElement('p');
-        typingP.textContent = 'דוני מקליד...';
-        typingDiv.appendChild(typingP);
-        chatMessages.appendChild(typingDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+        // Determine if typing feedback is needed
+        let showTypingFeedback = true;
+        if (sessionMemory.currentQuestion && sessionMemory.currentQuestion.type === 'options') {
+            showTypingFeedback = false;
+        }
+
+        // Show Doni typing feedback if needed
+        let typingDiv;
+        if (showTypingFeedback) {
+            typingDiv = document.createElement('div');
+            typingDiv.className = 'message system typing-feedback';
+            let typingP = document.createElement('p');
+            typingP.textContent = 'דוני מקליד...';
+            typingDiv.appendChild(typingP);
+            chatMessages.appendChild(typingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
 
         try {
             const response = await fetch(API_URL, {
@@ -331,8 +340,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             
-            // Remove typing feedback
-            typingDiv.remove();
+            // Remove typing feedback if it was shown
+            if (showTypingFeedback && typingDiv) {
+                typingDiv.remove();
+            }
             
             // Handle the response
             if (data.question && data.options) {
@@ -346,7 +357,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (error) {
             console.error('Error:', error);
-            typingDiv.remove();
+            if (showTypingFeedback && typingDiv) {
+                typingDiv.remove();
+            }
             addMessage('מצטער, אירעה שגיאה. אנא נסה שוב.', true);
         }
     }
