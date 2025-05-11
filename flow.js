@@ -99,7 +99,7 @@ function formatOptions(options) {
 }
 
 // Function to start the flow
-function startFlow() {
+export function startFlow() {
     // Here you would typically handle user input to select insurance type
     // For demonstration, we'll assume the user selects 'חובה'
     const selectedType = 'חובה';
