@@ -57,13 +57,8 @@ const db = new sqlite3.Database('dashboard.sqlite', (err) => {
 // Function to send email with PDF using EmailJS
 async function sendEmailWithPDF(pdfBlob) {
     try {
-        // Convert blob to base64
-        const base64PDF = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result.split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(pdfBlob);
-        });
+        // Convert blob to base64 using Buffer
+        const base64PDF = Buffer.from(pdfBlob).toString('base64');
 
         const response = await emailjs.send(
             'service_fidvxmm',
