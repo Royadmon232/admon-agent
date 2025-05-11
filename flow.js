@@ -6,32 +6,102 @@ const insuranceTypes = ['חובה', 'צד ג', 'מקיף'];
 // Define questions for each insurance type
 const questions = {
     'חובה': [
-        { id: 'carDetails', question: 'מה הם פרטי הרכב שלך?' },
-        { id: 'driverAge', question: 'מה הגיל שלך?' },
-        { id: 'licenseYears', question: 'כמה שנים יש לך רישיון נהיגה?' }
+        { 
+            id: 'carDetails', 
+            question: 'מה הם פרטי הרכב שלך?',
+            type: 'text'
+        },
+        { 
+            id: 'driverAge', 
+            question: 'מה הגיל שלך?',
+            type: 'number'
+        },
+        { 
+            id: 'licenseYears', 
+            question: 'כמה שנים יש לך רישיון נהיגה?',
+            type: 'number'
+        }
     ],
     'צד ג': [
-        { id: 'carDetails', question: 'מה הם פרטי הרכב שלך?' },
-        { id: 'driverAge', question: 'מה הגיל שלך?' },
-        { id: 'licenseYears', question: 'כמה שנים יש לך רישיון נהיגה?' },
-        { id: 'accidents', question: 'האם היו לך תאונות בעבר?' }
+        { 
+            id: 'carDetails', 
+            question: 'מה הם פרטי הרכב שלך?',
+            type: 'text'
+        },
+        { 
+            id: 'driverAge', 
+            question: 'מה הגיל שלך?',
+            type: 'number'
+        },
+        { 
+            id: 'licenseYears', 
+            question: 'כמה שנים יש לך רישיון נהיגה?',
+            type: 'number'
+        },
+        { 
+            id: 'accidents', 
+            question: 'האם היו לך תאונות בעבר?',
+            type: 'options',
+            options: ['כן', 'לא']
+        }
     ],
     'מקיף': [
-        { id: 'carDetails', question: 'מה הם פרטי הרכב שלך?' },
-        { id: 'driverAge', question: 'מה הגיל שלך?' },
-        { id: 'licenseYears', question: 'כמה שנים יש לך רישיון נהיגה?' },
-        { id: 'accidents', question: 'האם היו לך תאונות בעבר?' },
-        { id: 'coverage', question: 'איזה כיסוי ביטוחי אתה מעוניין?' }
+        { 
+            id: 'carDetails', 
+            question: 'מה הם פרטי הרכב שלך?',
+            type: 'text'
+        },
+        { 
+            id: 'driverAge', 
+            question: 'מה הגיל שלך?',
+            type: 'number'
+        },
+        { 
+            id: 'licenseYears', 
+            question: 'כמה שנים יש לך רישיון נהיגה?',
+            type: 'number'
+        },
+        { 
+            id: 'accidents', 
+            question: 'האם היו לך תאונות בעבר?',
+            type: 'options',
+            options: ['כן', 'לא']
+        },
+        { 
+            id: 'coverage', 
+            question: 'איזה כיסוי ביטוחי אתה מעוניין?',
+            type: 'options',
+            options: ['בסיסי', 'מורחב', 'מלא']
+        }
     ]
 };
 
 // Session object to store user answers
 let session = {};
 
+// Function to validate answer based on question type
+function validateAnswer(question, answer) {
+    switch (question.type) {
+        case 'number':
+            const num = Number(answer);
+            return !isNaN(num) && num > 0;
+        case 'options':
+            return question.options.includes(answer);
+        case 'text':
+        default:
+            return answer && answer.trim().length > 0;
+    }
+}
+
+// Function to format options for display
+function formatOptions(options) {
+    return options.map((opt, index) => `${index + 1}. ${opt}`).join('\n');
+}
+
 // Function to start the flow
 function startFlow() {
     console.log('ברוכים הבאים! איזה סוג ביטוח אתם מעוניינים?');
-    console.log(insuranceTypes.join(', '));
+    console.log(formatOptions(insuranceTypes));
     // Here you would typically handle user input to select insurance type
     // For demonstration, we'll assume the user selects 'חובה'
     const selectedType = 'חובה';
@@ -41,12 +111,33 @@ function startFlow() {
 // Function to ask questions based on selected insurance type
 function askQuestions(type) {
     const typeQuestions = questions[type];
-    typeQuestions.forEach(q => {
+    for (const q of typeQuestions) {
         console.log(q.question);
+        
+        if (q.type === 'options') {
+            console.log('אנא בחר אחת מהאפשרויות הבאות:');
+            console.log(formatOptions(q.options));
+        }
+        
         // Here you would typically handle user input to collect answers
-        // For demonstration, we'll assume the user answers 'Toyota'
-        session[q.id] = 'Toyota';
-    });
+        // For demonstration, we'll assume the user answers appropriately
+        let answer;
+        if (q.type === 'options') {
+            answer = q.options[0]; // Simulating user selecting first option
+        } else if (q.type === 'number') {
+            answer = '25'; // Simulating user entering a number
+        } else {
+            answer = 'Toyota'; // Simulating user entering text
+        }
+        
+        if (validateAnswer(q, answer)) {
+            session[q.id] = answer;
+        } else {
+            console.log('תשובה לא תקינה, אנא נסה שוב');
+            // In a real implementation, you would loop back to ask the same question
+        }
+    }
+    
     console.log('תודה על המידע! נמשיך לחישוב המחיר.');
     // Pass the session data to the pricing module
     calculatePrice(session);

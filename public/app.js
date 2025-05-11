@@ -142,7 +142,111 @@ document.addEventListener('DOMContentLoaded', () => {
     // Clear conversation log at the start of a new session
     conversationLog.length = 0;
 
-    // Function to add a message to the chat
+    // Function to create option elements
+    function createOptionElements(options, questionId) {
+        const container = document.createElement('div');
+        container.className = 'options-container';
+
+        // For mobile or when there are many options, use a select dropdown
+        const useSelect = window.innerWidth < 768 || options.length > 4;
+        
+        if (useSelect) {
+            const select = document.createElement('select');
+            select.className = 'option-select';
+            
+            // Add a default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'בחר אפשרות...';
+            select.appendChild(defaultOption);
+            
+            // Add the actual options
+            options.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.value = option;
+                optionElement.textContent = option;
+                select.appendChild(optionElement);
+            });
+            
+            select.addEventListener('change', (e) => {
+                if (e.target.value) {
+                    handleOptionSelection(e.target.value, questionId);
+                }
+            });
+            
+            container.appendChild(select);
+        } else {
+            // Use buttons for desktop when there are few options
+            options.forEach(option => {
+                const button = document.createElement('button');
+                button.className = 'option-button';
+                button.textContent = option;
+                button.addEventListener('click', () => {
+                    handleOptionSelection(option, questionId);
+                });
+                container.appendChild(button);
+            });
+        }
+        
+        return container;
+    }
+
+    // Function to handle option selection
+    function handleOptionSelection(selectedOption, questionId) {
+        // Remove the options container
+        const optionsContainer = document.querySelector('.options-container');
+        if (optionsContainer) {
+            optionsContainer.remove();
+        }
+        
+        // Add the selected option as a user message
+        addMessage(selectedOption);
+        
+        // Update session memory
+        sessionMemory[questionId] = selectedOption;
+        
+        // Continue with the flow
+        continueFlow(questionId, selectedOption);
+    }
+
+    // Function to continue the flow after option selection
+    async function continueFlow(questionId, answer) {
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    message: answer,
+                    sessionMemory,
+                    questionId
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
+            const data = await response.json();
+            
+            // Handle the response
+            if (data.question && data.options) {
+                // If the response includes a new question with options
+                addMessage(data.question, true);
+                const optionsContainer = createOptionElements(data.options, data.questionId);
+                document.querySelector('.chat-messages').appendChild(optionsContainer);
+            } else {
+                // Regular response
+                addMessage(data.response, true);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            addMessage('מצטער, אירעה שגיאה. אנא נסה שוב.', true);
+        }
+    }
+
+    // Update the addMessage function to handle option-based questions
     function addMessage(content, isSystem = false) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${isSystem ? 'system' : 'user'}`;
@@ -188,7 +292,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // Function to handle sending messages
+    // Update the sendMessage function to handle option-based questions
     async function sendMessage() {
         const message = userInput.value.trim();
         if (!message) return;
@@ -213,63 +317,37 @@ document.addEventListener('DOMContentLoaded', () => {
         chatMessages.scrollTop = chatMessages.scrollHeight;
 
         try {
-            // Check if the user requested an insurance quote
-            if (message.includes('הצעת מחיר')) {
-                if (!sessionMemory.driverAge) {
-                    addMessage("מה גיל הנהג הצעיר ביותר ברכב?", true);
-                    return;
-                }
-                if (!sessionMemory.driverGender) {
-                    addMessage("מה מין הנהג הראשי? (זכר/נקבה)", true);
-                    return;
-                }
-                if (!sessionMemory.vehicleNumber) {
-                    addMessage("מה מספר הרכב שלך?", true);
-                    return;
-                }
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ message, sessionMemory }),
+            });
 
-                const userDetails = {
-                    age: parseInt(sessionMemory.driverAge),
-                    gender: sessionMemory.driverGender === 'זכר' ? 'male' : 'female',
-                    vehicleType: 'standard' // Assuming a default vehicle type for now
-                };
-                const bestOfferMessage = await calculateBestOffer(userDetails);
-                addMessage(bestOfferMessage, true);
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+
+            const data = await response.json();
+            
+            // Remove typing feedback
+            typingDiv.remove();
+            
+            // Handle the response
+            if (data.question && data.options) {
+                // If the response includes a question with options
+                addMessage(data.question, true);
+                const optionsContainer = createOptionElements(data.options, data.questionId);
+                document.querySelector('.chat-messages').appendChild(optionsContainer);
             } else {
-                // Handle the message with agentController
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ message, sessionMemory }),
-                });
-
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-
-                const data = await response.json();
-
-                if (data.error) {
-                    console.error('OpenAI/Server error:', data.error);
-                    addMessage('אירעה שגיאה בעת עיבוד הבקשה שלך. אנא נסה שוב.', true);
-                } else {
-                    addMessage(data.reply, true);
-
-                    // Check if we should generate PDF
-                    if (data.shouldGeneratePDF) {
-                        await generateStyledPDF();
-                    }
-                }
+                // Regular response
+                addMessage(data.response, true);
             }
         } catch (error) {
             console.error('Error:', error);
-            addMessage('Sorry, there was an error connecting to the server. Please try again.', true);
-        }
-        // Remove typing feedback
-        if (typingDiv && typingDiv.parentNode) {
-            typingDiv.parentNode.removeChild(typingDiv);
+            typingDiv.remove();
+            addMessage('מצטער, אירעה שגיאה. אנא נסה שוב.', true);
         }
     }
 

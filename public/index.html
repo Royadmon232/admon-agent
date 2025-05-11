@@ -16,6 +16,56 @@
             max-height: 400px; /* Set a max height for the chat messages container */
             overflow-y: auto; /* Enable vertical scrolling */
         }
+
+        .options-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin: 10px 0;
+            width: 100%;
+        }
+
+        .option-button {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: right;
+            font-family: 'Assistant', sans-serif;
+        }
+
+        .option-button:hover {
+            background: #f0f0f0;
+            border-color: #999;
+        }
+
+        .option-button.selected {
+            background: #007bff;
+            color: white;
+            border-color: #0056b3;
+        }
+
+        .option-select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            font-family: 'Assistant', sans-serif;
+            margin: 10px 0;
+        }
+
+        @media (max-width: 768px) {
+            .options-container {
+                flex-direction: column;
+            }
+            
+            .option-button {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
