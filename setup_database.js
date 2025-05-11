@@ -81,6 +81,40 @@ async function setupDatabase() {
         `);
     }
 
+    // Create session analytics table
+    const sessionAnalyticsTable = `
+        CREATE TABLE IF NOT EXISTS session_analytics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            start_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            end_timestamp TIMESTAMP,
+            insurance_type TEXT,
+            questions_answered INTEGER DEFAULT 0,
+            final_quote TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `;
+    await db.exec(sessionAnalyticsTable);
+
+    // Create leads table
+    const createLeadsTable = `
+        CREATE TABLE IF NOT EXISTS leads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            contact TEXT NOT NULL,
+            insurance_type TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    `;
+
+    db.run(createLeadsTable, (err) => {
+        if (err) {
+            console.error('Error creating leads table:', err);
+        } else {
+            console.log('Leads table created or already exists.');
+        }
+    });
+
     // Function to import CSV data
     async function importCSVData(tableName, csvPath) {
         try {

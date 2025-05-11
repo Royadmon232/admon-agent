@@ -7,31 +7,106 @@
     <title>דוני - סוכן ביטוח וירטואלי</title>
     <style>
         body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            font-family: Arial, sans-serif;
             margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f4f4f9;
+            color: #333;
             text-align: center;
+        }
+        .hero {
+            background-color: #fff;
+            padding: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .hero h1 {
+            font-size: 2.5em;
+            margin: 0.5em 0;
+        }
+        .hero p {
+            font-size: 1.2em;
+            margin: 0.5em 0;
+        }
+        .cta-button {
+            background-color: #007bff;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 10px;
+        }
+        .cta-button:hover {
+            background-color: #0056b3;
+        }
+        .benefits {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 20px;
+        }
+        .benefit {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        .benefit img {
+            width: 40px;
+            height: 40px;
+            margin-right: 10px;
         }
     </style>
 </head>
 <body>
-    <div>
-        <img src="doni-logo.png" alt="Doni Logo">
-        <p>דוני הוא סוכן ביטוח וירטואלי חכם, המציע לך הצעות ביטוח בהתאמה אישית בצורה נוחה ומהירה.</p>
-        <button onclick="window.location.href='index.html'">התחל שיחה</button>
-        <button onclick="toggleLoginForm()">הכנס כמנהל</button>
+    <div class="hero">
+        <img src="doni-logo.png" alt="Doni Logo" style="width: 100px; height: auto;">
+        <h1>דוני – סוכן הביטוח הווירטואלי שלך</h1>
+        <p>השווה הצעות ביטוח רכב תוך פחות מ־2 דקות</p>
+        <button class="cta-button" onclick="window.location.href='index.html'">התחל עכשיו</button>
     </div>
-    <div id="login-form" style="display: none;">
-        <label for="username">שם משתמש:</label>
-        <input type="text" id="username" name="username"><br>
-        <label for="password">סיסמה:</label>
-        <input type="password" id="password" name="password"><br>
-        <button onclick="handleLogin()">התחבר</button>
+    <div class="benefits">
+        <div class="benefit">
+            <img src="icons/insurance-companies.png" alt="Insurance Companies">
+            <span>מחירים מכל חברות הביטוח</span>
+        </div>
+        <div class="benefit">
+            <img src="icons/automation.png" alt="Automation">
+            <span>תהליך אוטומטי חכם</span>
+        </div>
+        <div class="benefit">
+            <img src="icons/no-phone.png" alt="No Phone">
+            <span>אין צורך בטלפון או סוכן</span>
+        </div>
     </div>
-    <p id="error-message" style="color: red;"></p>
+    <div class="admin-login">
+        <button class="cta-button" onclick="toggleLoginForm()">הכנס כמנהל</button>
+        <div id="login-form" style="display: none; margin-top: 20px;">
+            <label for="username">שם משתמש:</label>
+            <input type="text" id="username" name="username"><br>
+            <label for="password">סיסמה:</label>
+            <input type="password" id="password" name="password"><br>
+            <button class="cta-button" onclick="handleLogin()">התחבר</button>
+        </div>
+        <p id="error-message" style="color: red;"></p>
+    </div>
     <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/service-worker.js').then(function(registration) {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, function(err) {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+
         function toggleLoginForm() {
             const form = document.getElementById('login-form');
             form.style.display = form.style.display === 'none' ? 'block' : 'none';
@@ -56,21 +131,11 @@
                 if (result.success) {
                     window.location.href = 'dashboard.html';
                 } else {
-                    errorMessage.textContent = 'Login failed. Please try again.';
+                    errorMessage.textContent = 'התחברות נכשלה. אנא נסה שוב.';
                 }
             } catch (error) {
-                errorMessage.textContent = 'An error occurred. Please try again later.';
+                errorMessage.textContent = 'אירעה שגיאה. אנא נסה שוב מאוחר יותר.';
             }
-        }
-
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/service-worker.js').then(function(registration) {
-                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                }, function(err) {
-                    console.log('ServiceWorker registration failed: ', err);
-                });
-            });
         }
     </script>
 </body>

@@ -250,4 +250,47 @@ export async function calculateBestOffer(userDetails) {
     return `בהתאם לפרטים שסיפקת, ההצעה המשתלמת ביותר היא של חברת ${bestOffer.company} – ${bestOffer.price.toLocaleString()} ₪ בשנה`;
 }
 
+// Function to log session analytics
+async function logSessionAnalytics(sessionData) {
+    try {
+        const db = await open({
+            filename: './insuranceQuotes.sqlite',
+            driver: sqlite3.Database
+        });
+
+        const stmt = await db.prepare(`
+            INSERT INTO session_analytics (session_id, start_timestamp, end_timestamp, insurance_type, questions_answered, final_quote)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `);
+
+        await stmt.run(
+            sessionData.sessionId,
+            sessionData.startTimestamp,
+            sessionData.endTimestamp,
+            sessionData.insuranceType,
+            sessionData.questionsAnswered,
+            sessionData.finalQuote
+        );
+
+        await stmt.finalize();
+        await db.close();
+    } catch (error) {
+        console.error('Failed to log session analytics:', error);
+    }
+}
+
+// Example usage of logSessionAnalytics
+async function endSession(sessionId, insuranceType, questionsAnswered, finalQuote) {
+    const sessionData = {
+        sessionId,
+        startTimestamp: new Date().toISOString(), // This should be set at session start
+        endTimestamp: new Date().toISOString(),
+        insuranceType,
+        questionsAnswered,
+        finalQuote
+    };
+
+    await logSessionAnalytics(sessionData);
+}
+
 export default router; 

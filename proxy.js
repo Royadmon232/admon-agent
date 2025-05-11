@@ -187,6 +187,38 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/public/landing.html');
 });
 
+// Endpoint to handle 'Speak to a human' requests
+app.post('/api/contact-human', async (req, res) => {
+    const { name, contact, insuranceType } = req.body;
+
+    // Basic validation
+    if (!name || !contact || !insuranceType) {
+        return res.status(400).json({ error: 'נא למלא את כל השדות הנדרשים' });
+    }
+
+    // Insert lead into the database
+    const insertLeadQuery = `INSERT INTO leads (name, contact, insurance_type) VALUES (?, ?, ?)`;
+    db.run(insertLeadQuery, [name, contact, insuranceType], function(err) {
+        if (err) {
+            console.error('Error inserting lead:', err);
+            return res.status(500).json({ error: 'שגיאה בשמירת הפרטים' });
+        }
+
+        // Send email to admin
+        emailjs.send('service_fidvxmm', 'template_0svkc5i', {
+            to_email: 'admin@example.com',
+            subject: 'New Lead for Insurance',
+            message: `שם: ${name}, פרטי קשר: ${contact}, סוג ביטוח: ${insuranceType}`
+        }).then(response => {
+            console.log('Email sent successfully:', response);
+            res.json({ success: 'הפרטים נשלחו בהצלחה' });
+        }).catch(error => {
+            console.error('Error sending email:', error);
+            res.status(500).json({ error: 'שגיאה בשליחת המייל' });
+        });
+    });
+});
+
 // Start server
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);

@@ -2,6 +2,7 @@
 
 import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
+import fs from 'fs';
 
 // Function to get database connection
 async function getDB() {
@@ -50,13 +51,61 @@ async function calculatePrice(userData) {
     }));
 }
 
+// Function to apply modifiers to the base price
+function applyModifiers(basePrice, userData, modifiers) {
+    let adjustedPrice = basePrice;
+    let reasons = [];
+
+    modifiers.forEach(modifier => {
+        const { conditionName, type, value, criteria } = modifier;
+        let criteriaMet = true;
+
+        for (const key in criteria) {
+            const condition = criteria[key];
+            const userValue = userData[key];
+
+            if (typeof condition === 'string' && condition.startsWith('>=')) {
+                criteriaMet = criteriaMet && (userValue >= parseInt(condition.slice(2)));
+            } else if (typeof condition === 'string' && condition.startsWith('<')) {
+                criteriaMet = criteriaMet && (userValue < parseInt(condition.slice(1)));
+            } else {
+                criteriaMet = criteriaMet && (userValue === condition);
+            }
+        }
+
+        if (criteriaMet) {
+            if (type === 'discount') {
+                adjustedPrice *= (1 + value / 100);
+            } else if (type === 'surcharge') {
+                adjustedPrice *= (1 + value / 100);
+            }
+            reasons.push(conditionName);
+        }
+    });
+
+    return { adjustedPrice, reasons };
+}
+
 // Main function to process user data and return best quotes
 export async function processUserData(userData) {
     try {
         const bestQuotes = await calculatePrice(userData);
-        return bestQuotes;
+
+        // Load modifiers
+        const modifiers = JSON.parse(fs.readFileSync('./pricingModifiers.json', 'utf8'));
+
+        // Apply modifiers to each quote
+        return bestQuotes.map(quote => {
+            const { adjustedPrice, reasons } = applyModifiers(quote.price, userData, modifiers);
+            return {
+                company: quote.company,
+                price: quote.price,
+                adjustedPrice: adjustedPrice.toFixed(2),
+                reasonForAdjustment: reasons.join(', ')
+            };
+        });
     } catch (error) {
-        console.error('Error processing user data:', error);
+        console.error('שגיאה בעיבוד נתוני המשתמש:', error);
         throw error;
     }
 } 
