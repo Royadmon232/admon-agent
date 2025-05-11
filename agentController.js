@@ -107,6 +107,17 @@ function isVehicleQuery(message) {
     return vehicleKeywords.some(keyword => message.includes(keyword));
 }
 
+// Helper function to check if message is about car insurance
+function isCarInsuranceQuery(message) {
+    const carInsuranceKeywords = [
+        'I want car insurance',
+        'תן לי הצעת מחיר',
+        'ביטוח רכב',
+        'הצעת מחיר לביטוח רכב'
+    ];
+    return carInsuranceKeywords.some(keyword => message.includes(keyword));
+}
+
 // Enhance Doni's response to be more persuasive and professional
 function enhanceResponse(response) {
     const persuasivePhrases = [
@@ -125,6 +136,11 @@ function enhanceResponse(response) {
 // Main function to determine which tool to use
 export async function handleUserMessage(message) {
     try {
+        // Check for car insurance queries
+        if (isCarInsuranceQuery(message)) {
+            // Trigger the question flow system
+            return 'אני אעזור לך לקבל הצעת מחיר לביטוח רכב. בוא נתחיל עם כמה שאלות פשוטות.';
+        }
         // Check for vehicle-related queries
         if (isVehicleQuery(message)) {
             const licensePlate = extractLicensePlate(message);
