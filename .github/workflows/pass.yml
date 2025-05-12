@@ -1,9 +1,0 @@
-name: Always Pass
-
-on: [push]
-
-jobs:
-  always-success:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "✅ Success: This action always passes"
