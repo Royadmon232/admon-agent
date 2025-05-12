@@ -205,7 +205,7 @@ app.post('/api/contact-human', async (req, res) => {
     });
 });
 
-// Update the `/chat` POST route
+// Update the `/chat` POST route to return a consistent JSON structure
 app.post('/chat', async (req, res) => {
     try {
         const { message, sessionMemory } = req.body;
@@ -236,7 +236,7 @@ app.post('/chat', async (req, res) => {
         });
 
         const aiResponse = completion.choices[0].message.content;
-        res.json({ type: 'openai', content: aiResponse });
+        res.json({ reply: aiResponse });
     } catch (error) {
         console.error('OpenAI request failed:', error);
         res.status(500).json({ error: 'OpenAI request failed' });

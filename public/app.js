@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // Update the sendMessage function to handle different response types
+    // Update the sendMessage function to handle structured response from /chat
     async function sendMessage() {
         const message = userInput.value.trim();
         if (!message) return;
@@ -348,16 +348,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 typingDiv.remove();
             }
 
-            // Handle the response based on type
+            // Handle the structured response
             if (data.type === 'flow') {
-                // Display the question in the chat
+                // Extract and use the question, id, and inputType
                 addMessage(data.question, true);
-                // Use existing UI logic to show the correct input type
                 const optionsContainer = createOptionElements(data.options, data.id);
                 document.querySelector('.chat-messages').appendChild(optionsContainer);
             } else if (data.type === 'openai') {
-                // Display the content using existing logic
-                addMessage(data.content, true);
+                // Handle as a regular AI reply
+                addMessage(data.reply, true);
             }
         } catch (error) {
             console.error('Error:', error);
