@@ -92,37 +92,18 @@ function classifyMessage(message) {
 app.post('/api/chat', async (req, res) => {
     try {
         const { message, sessionMemory } = req.body;
-        const messageType = classifyMessage(message);
 
-        if (messageType === 'vehicle_lookup') {
-            // Extract vehicle number
-            const plateNumber = sessionMemory.vehicleNumber || (message.match(/\d{7,8}/) || [])[0];
-
-            if (plateNumber) {
-                // Simulate dynamic vehicle lookup response
-                return res.json({
-                    type: 'vehicle_lookup',
-                    reply: `פרטי הרכב עבור לוחית ${plateNumber}: ניסאן מיקרה 2021, צבע שחור`
-                });
-            } else {
-                // Fallback if no vehicle number is detected
-                return res.json({
-                    type: 'vehicle_lookup',
-                    reply: 'לא הצלחתי לזהות מספר רכב. אנא נסה שוב עם מספר מדויק בן 7 או 8 ספרות.'
-                });
-            }
+        // Use handleUserMessage to detect vehicle-related queries
+        const agentResponse = await handleUserMessage(message);
+        if (agentResponse !== null) {
+            return res.json({ type: 'vehicle_lookup', reply: agentResponse });
         }
 
-        if (messageType === 'insurance_quote') {
+        // Check for flow-related keywords
+        if (message.includes('ביטוח רכב') || message.includes('הצעת מחיר') || message.includes('חובה') || message.includes('צד ג') || message.includes('מקיף')) {
             const { startFlow } = await import('./flow.js');
             const firstQuestion = startFlow();
             return res.json({ type: 'flow', question: firstQuestion.question, options: firstQuestion.options || [], id: firstQuestion.id });
-        }
-
-        // Existing behavior for general messages
-        const agentResponse = await handleUserMessage(message);
-        if (agentResponse !== null) {
-            return res.json({ type: 'openai', reply: agentResponse });
         }
 
         // Fallback to OpenAI
