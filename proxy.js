@@ -205,11 +205,26 @@ app.post('/api/contact-human', async (req, res) => {
     });
 });
 
-// Add a new POST route at `/chat`
+// Update the `/chat` POST route
 app.post('/chat', async (req, res) => {
     try {
         const { message, sessionMemory } = req.body;
 
+        // Check for keywords to decide flow
+        if (message.includes('ביטוח רכב') || message.includes('הצעת מחיר')) {
+            // Import and call startFlow from flow.js
+            const { startFlow } = await import('./flow.js');
+            const firstQuestion = startFlow();
+
+            return res.json({
+                type: 'flow',
+                question: firstQuestion.question,
+                id: firstQuestion.id,
+                inputType: firstQuestion.type
+            });
+        }
+
+        // Otherwise, call OpenAI
         const completion = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [
@@ -221,7 +236,7 @@ app.post('/chat', async (req, res) => {
         });
 
         const aiResponse = completion.choices[0].message.content;
-        res.json({ content: aiResponse });
+        res.json({ type: 'openai', content: aiResponse });
     } catch (error) {
         console.error('OpenAI request failed:', error);
         res.status(500).json({ error: 'OpenAI request failed' });

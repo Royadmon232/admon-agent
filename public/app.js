@@ -295,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // Update the sendMessage function to handle option-based questions
+    // Update the sendMessage function to handle different response types
     async function sendMessage() {
         const message = userInput.value.trim();
         if (!message) return;
@@ -342,21 +342,22 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = await response.json();
-            
+
             // Remove typing feedback if it was shown
             if (showTypingFeedback && typingDiv) {
                 typingDiv.remove();
             }
-            
-            // Handle the response
-            if (data.question && data.options) {
-                // If the response includes a question with options
+
+            // Handle the response based on type
+            if (data.type === 'flow') {
+                // Display the question in the chat
                 addMessage(data.question, true);
-                const optionsContainer = createOptionElements(data.options, data.questionId);
+                // Use existing UI logic to show the correct input type
+                const optionsContainer = createOptionElements(data.options, data.id);
                 document.querySelector('.chat-messages').appendChild(optionsContainer);
-            } else {
-                // Regular response
-                addMessage(data.response, true);
+            } else if (data.type === 'openai') {
+                // Display the content using existing logic
+                addMessage(data.content, true);
             }
         } catch (error) {
             console.error('Error:', error);
