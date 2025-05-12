@@ -254,9 +254,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isSystem && content && content.includes('ההצעה המשתלמת ביותר')) {
             const cardDiv = document.createElement('div');
             cardDiv.className = 'insurance-card';
-            const [company, price] = content.match(/חברת (\S+) – (\d+,?\d*) ₪/).slice(1);
-            cardDiv.innerHTML = `<strong>${company}</strong><br><span class='highlight'>${price} ₪</span><br>${content}`;
-            messageDiv.appendChild(cardDiv);
+            const match = content.match(/חברת (\S+) – (\d+,?\d*) ₪/);
+            if (match) {
+                const [company, price] = match.slice(1);
+                cardDiv.innerHTML = `<strong>${company}</strong><br><span class='highlight'>${price} ₪</span><br>${content}`;
+                messageDiv.appendChild(cardDiv);
+            }
         } else {
             if (isSystem) {
                 const avatar = document.createElement('img');
