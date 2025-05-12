@@ -295,16 +295,19 @@ document.addEventListener('DOMContentLoaded', () => {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // Update the sendMessage function to handle structured response from /chat
+    // Update the sendMessage function to handle the updated structured JSON response
     async function sendMessage() {
+        // Check if the input is empty
         const message = userInput.value.trim();
         if (!message) return;
 
-        // Update session memory
+        // Update session memory (age, gender, license plate)
         updateSessionMemory(message);
 
-        // Add user message to chat
+        // Add the user's message to the chat display
         addMessage(message);
+
+        // Clear the input field after sending
         userInput.value = '';
 
         // Ensure chat scrolls to the bottom
@@ -329,6 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
+            // Send message to server through POST request
             const response = await fetch(API_URL, {
                 method: 'POST',
                 headers: {
@@ -337,10 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({ message, sessionMemory }),
             });
 
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-
+            // Parse response from server
             const data = await response.json();
 
             // Remove typing feedback if it was shown
@@ -348,17 +349,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 typingDiv.remove();
             }
 
-            // Handle the structured response
+            // Handle flow or OpenAI response depending on type
             if (data.type === 'flow') {
-                // Extract and use the question, id, and inputType
+                // Handle flow question and options
+                // Display the question to the user
                 addMessage(data.question, true);
-                const optionsContainer = createOptionElements(data.options, data.id);
-                document.querySelector('.chat-messages').appendChild(optionsContainer);
+                // If options exist, generate and show them
+                if (data.options && data.options.length > 0) {
+                    const optionsContainer = createOptionElements(data.options, data.id);
+                    document.querySelector('.chat-messages').appendChild(optionsContainer);
+                }
             } else if (data.type === 'openai') {
-                // Handle as a regular AI reply
+                // Handle plain AI reply
+                // Display the OpenAI reply directly
                 addMessage(data.reply, true);
+            } else {
+                // Display a simple Hebrew error message
+                addMessage('אירעה שגיאה, אנא נסה שוב.', true);
             }
         } catch (error) {
+            // If there's an error with the request, show an error message in the chat
             console.error('Error:', error);
             if (showTypingFeedback && typingDiv) {
                 typingDiv.remove();
