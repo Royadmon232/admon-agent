@@ -205,6 +205,29 @@ app.post('/api/contact-human', async (req, res) => {
     });
 });
 
+// Add a new POST route at `/chat`
+app.post('/chat', async (req, res) => {
+    try {
+        const { message, sessionMemory } = req.body;
+
+        const completion = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [
+                { role: 'system', content: 'You are an insurance assistant in Hebrew.' },
+                { role: 'user', content: message }
+            ],
+            temperature: 0.7,
+            max_tokens: 500
+        });
+
+        const aiResponse = completion.choices[0].message.content;
+        res.json({ content: aiResponse });
+    } catch (error) {
+        console.error('OpenAI request failed:', error);
+        res.status(500).json({ error: 'OpenAI request failed' });
+    }
+});
+
 // Start server
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
