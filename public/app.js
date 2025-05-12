@@ -251,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${isSystem ? 'system' : 'user'}`;
 
-        if (isSystem && content.includes('ההצעה המשתלמת ביותר')) {
+        if (isSystem && content && content.includes('ההצעה המשתלמת ביותר')) {
             const cardDiv = document.createElement('div');
             cardDiv.className = 'insurance-card';
             const [company, price] = content.match(/חברת (\S+) – (\d+,?\d*) ₪/).slice(1);
