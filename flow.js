@@ -1,4 +1,4 @@
- // flow.js
+// flow.js
 
 // Define the types of insurance
 const insuranceTypes = ['חובה', 'צד ג', 'מקיף'];
@@ -99,11 +99,23 @@ function formatOptions(options) {
 }
 
 // Function to start the flow
-export function startFlow() {
-    // Here you would typically handle user input to select insurance type
-    // For demonstration, we'll assume the user selects 'חובה'
-    const selectedType = 'חובה';
-    askQuestions(selectedType);
+export function startFlow(type = 'חובה') {
+    const validTypes = ['חובה', 'צד ג', 'מקיף'];
+    // Ensure the type is valid
+    if (!validTypes.includes(type)) {
+        type = 'חובה';
+    }
+    // Check if questions exist for the type
+    if (questions[type] && questions[type].length > 0) {
+        return questions[type][0];
+    } else {
+        return {
+            id: 'fallback',
+            question: 'לא נמצאו שאלות עבור סוג הביטוח שבחרת.',
+            options: [],
+            type: 'text'
+        };
+    }
 }
 
 // Function to ask questions based on selected insurance type
