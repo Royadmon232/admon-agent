@@ -1,4 +1,4 @@
-// flow.js
+ // flow.js
 
 // Define the types of insurance
 const insuranceTypes = ['חובה', 'צד ג', 'מקיף'];
