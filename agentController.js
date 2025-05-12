@@ -25,7 +25,10 @@ async function fetchVehicleData(licensePlate) {
 
         if (records && records.length > 0) {
             const { tozeret_nm, degem_nm, shnat_yitzur, sug_delek_nm } = records[0];
-            return `הרכב שלך הוא ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}.`;
+            return {
+                type: 'vehicle',
+                details: `הרכב שלך הוא ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}.`
+            };
         }
 
         // Check motorcycle registry
@@ -34,14 +37,23 @@ async function fetchVehicleData(licensePlate) {
 
         if (records && records.length > 0) {
             const { tozeret_nm, degem_nm, shnat_yitzur, sug_delek_nm } = records[0];
-            return `האופנוע שלך הוא ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}.`;
+            return {
+                type: 'vehicle',
+                details: `האופנוע שלך הוא ${tozeret_nm} ${degem_nm}, שנת ${shnat_yitzur}, ${sug_delek_nm}.`
+            };
         }
 
-        return 'לא נמצא רכב עם מספר רישוי כזה במאגר.';
+        return {
+            type: 'vehicle',
+            details: 'לא נמצא רכב עם מספר רישוי כזה במאגר.'
+        };
     } catch (error) {
         console.error('❌ Error fetching vehicle data:', error);
         // Only fallback to dummy data if API call fails completely
-        return getVehicleInfoByPlate(licensePlate);
+        return {
+            type: 'vehicle',
+            details: getVehicleInfoByPlate(licensePlate)
+        };
     }
 }
 
@@ -162,7 +174,7 @@ export async function handleUserMessage(message) {
                     processedPlates.add(licensePlate);
                 }
                 const vehicleData = await fetchVehicleData(licensePlate);
-                return enhanceResponse(vehicleData);
+                return enhanceResponse(vehicleData.details);
             } else {
                 return enhanceResponse('לא הצלחתי לזהות את מספר הרכב. נסה לכתוב רק את המספר.');
             }

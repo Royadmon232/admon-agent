@@ -101,6 +101,7 @@ app.post('/api/chat', async (req, res) => {
                 isSystem: true,
                 timestamp: new Date().toISOString()
             });
+            // Returning structured response for consistent frontend handling
             return res.json({ reply: agentResponse });
         }
 
@@ -133,12 +134,14 @@ app.post('/api/chat', async (req, res) => {
             timestamp: new Date().toISOString()
         });
 
+        // Returning structured response with PDF generation flag
         res.json({ 
             reply: aiResponse,
             shouldGeneratePDF: conversationLog.length >= MESSAGE_THRESHOLD || message.toLowerCase() === 'סיכום'
         });
     } catch (error) {
         console.error('Error:', error);
+        // Returning error in structured JSON format
         res.status(500).json({ 
             error: 'אירעה שגיאה בעת עיבוד הבקשה שלך' // Translated to Hebrew
         });
@@ -205,7 +208,7 @@ app.post('/api/contact-human', async (req, res) => {
     });
 });
 
-// Update the `/chat` POST route to return a consistent JSON structure
+// Modify the `/chat` POST route to return a consistent JSON response structure
 app.post('/chat', async (req, res) => {
     try {
         const { message, sessionMemory } = req.body;
@@ -219,8 +222,8 @@ app.post('/chat', async (req, res) => {
             return res.json({
                 type: 'flow',
                 question: firstQuestion.question,
-                id: firstQuestion.id,
-                inputType: firstQuestion.type
+                options: firstQuestion.options || [],
+                id: firstQuestion.id
             });
         }
 
@@ -236,7 +239,10 @@ app.post('/chat', async (req, res) => {
         });
 
         const aiResponse = completion.choices[0].message.content;
-        res.json({ reply: aiResponse });
+        res.json({
+            type: 'openai',
+            reply: aiResponse
+        });
     } catch (error) {
         console.error('OpenAI request failed:', error);
         res.status(500).json({ error: 'OpenAI request failed' });
