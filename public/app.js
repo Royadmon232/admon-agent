@@ -230,15 +230,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             
-            // Handle the response
-            if (data.question && data.options) {
-                // If the response includes a new question with options
+            // Handle the structured response
+            if (data.type === 'flow') {
+                // Display the question to the user
                 addMessage(data.question, true);
-                const optionsContainer = createOptionElements(data.options, data.questionId);
-                document.querySelector('.chat-messages').appendChild(optionsContainer);
+                // If options exist, generate and show them
+                if (data.options && data.options.length > 0) {
+                    const optionsContainer = createOptionElements(data.options, data.id);
+                    document.querySelector('.chat-messages').appendChild(optionsContainer);
+                }
+            } else if (data.type === 'vehicle_lookup') {
+                // Display vehicle details
+                addMessage(data.reply, true);
+            } else if (data.type === 'openai') {
+                // Display the OpenAI reply directly
+                addMessage(data.reply, true);
             } else {
-                // Regular response
-                addMessage(data.response, true);
+                // Fallback for unexpected types
+                addMessage('אירעה שגיאה, אנא נסה שוב.', true);
             }
         } catch (error) {
             console.error('Error:', error);
@@ -349,9 +358,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 typingDiv.remove();
             }
 
-            // Handle flow or OpenAI response depending on type
+            // Handle the structured response
             if (data.type === 'flow') {
-                // Handle flow question and options
                 // Display the question to the user
                 addMessage(data.question, true);
                 // If options exist, generate and show them
@@ -359,12 +367,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     const optionsContainer = createOptionElements(data.options, data.id);
                     document.querySelector('.chat-messages').appendChild(optionsContainer);
                 }
+            } else if (data.type === 'vehicle_lookup') {
+                // Display vehicle details
+                addMessage(data.reply, true);
             } else if (data.type === 'openai') {
-                // Handle plain AI reply
                 // Display the OpenAI reply directly
                 addMessage(data.reply, true);
             } else {
-                // Display a simple Hebrew error message
+                // Fallback for unexpected types
                 addMessage('אירעה שגיאה, אנא נסה שוב.', true);
             }
         } catch (error) {

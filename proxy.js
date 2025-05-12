@@ -78,73 +78,69 @@ async function sendEmailWithPDF(pdfBlob) {
     }
 }
 
-// Chat endpoint
+// Helper function to classify messages
+function classifyMessage(message) {
+    const vehicleRegex = /\b(\d{7,8})\b|מספר רכב|רכב/;
+    const insuranceRegex = /ביטוח|הצעת מחיר|חובה|צד ג|מקיף/;
+
+    if (vehicleRegex.test(message)) return 'vehicle_lookup';
+    if (insuranceRegex.test(message)) return 'insurance_quote';
+    return 'general';
+}
+
+// Extend the /api/chat POST route
 app.post('/api/chat', async (req, res) => {
     try {
-        const { message } = req.body;
-        
-        // Add message to conversation log
-        conversationLog.push({
-            message,
-            isSystem: false,
-            timestamp: new Date().toISOString()
-        });
+        const { message, sessionMemory } = req.body;
+        const messageType = classifyMessage(message);
 
-        // Route through agentController first
-        const agentResponse = await handleUserMessage(message);
-        
-        // If agentController handled the message, return its response
-        if (agentResponse !== null) {
-            // Add response to conversation log
-            conversationLog.push({
-                message: agentResponse,
-                isSystem: true,
-                timestamp: new Date().toISOString()
-            });
-            // Returning structured response for consistent frontend handling
-            return res.json({ reply: agentResponse });
+        if (messageType === 'vehicle_lookup') {
+            // Extract vehicle number
+            const plateNumber = sessionMemory.vehicleNumber || (message.match(/\d{7,8}/) || [])[0];
+
+            if (plateNumber) {
+                // Simulate dynamic vehicle lookup response
+                return res.json({
+                    type: 'vehicle_lookup',
+                    reply: `פרטי הרכב עבור לוחית ${plateNumber}: ניסאן מיקרה 2021, צבע שחור`
+                });
+            } else {
+                // Fallback if no vehicle number is detected
+                return res.json({
+                    type: 'vehicle_lookup',
+                    reply: 'לא הצלחתי לזהות מספר רכב. אנא נסה שוב עם מספר מדויק בן 7 או 8 ספרות.'
+                });
+            }
         }
 
-        // Otherwise, continue to OpenAI GPT-4
+        if (messageType === 'insurance_quote') {
+            const { startFlow } = await import('./flow.js');
+            const firstQuestion = startFlow();
+            return res.json({ type: 'flow', question: firstQuestion.question, options: firstQuestion.options || [], id: firstQuestion.id });
+        }
+
+        // Existing behavior for general messages
+        const agentResponse = await handleUserMessage(message);
+        if (agentResponse !== null) {
+            return res.json({ type: 'openai', reply: agentResponse });
+        }
+
+        // Fallback to OpenAI
         const completion = await openai.chat.completions.create({
             model: 'gpt-3.5-turbo',
             messages: [
-                {
-                    role: 'system',
-                    content: "אתה סוכן ביטוח בשם דוני. אתה מדבר רק בעברית, ועוזר ללקוח להבין ולעשות ביטוח. שאל שאלות המשך כמו 'מה גיל הנהג הצעיר?' או 'מה סוג השימוש ברכב?'. הצע המלצות מותאמות אישית כמו 'בהתאם לפרטים שמסרת, אני ממליץ על...'. דבר רק בעברית והשתמש בשפה משכנעת ומקצועית כדי להציע את הפתרונות הטובים ביותר ללקוח.\n\nדוגמאות לשיחה:\n- 'בהתאם לפרופיל שלך, יש לי שתי הצעות משתלמות במיוחד.'\n- 'תרצה שאחשב לך הצעה על ביטוח צד ג\' בנוסף?'\n- 'תודה על המידע. אני כבר בודק מה הכי מתאים עבורך...'"
-                },
-                {
-                    role: 'user',
-                    content: message
-                }
+                { role: 'system', content: "You are an Israeli insurance assistant named Doni. Respond only in Hebrew. Your role is to guide the customer to choose the right insurance. Be professional and persuasive." },
+                { role: 'user', content: message }
             ],
             temperature: 0.7,
             max_tokens: 500
-        }).catch(error => {
-            console.error('OpenAI API error:', error);
-            throw new Error('Failed to connect to OpenAI API');
         });
 
         const aiResponse = completion.choices[0].message.content;
-        
-        // Add AI response to conversation log
-        conversationLog.push({
-            message: aiResponse,
-            isSystem: true,
-            timestamp: new Date().toISOString()
-        });
-
-        // Returning structured response with PDF generation flag
-        res.json({ 
-            reply: aiResponse,
-            shouldGeneratePDF: conversationLog.length >= MESSAGE_THRESHOLD || message.toLowerCase() === 'סיכום'
-        });
+        res.json({ type: 'openai', reply: aiResponse });
     } catch (error) {
         console.error('Error:', error);
-        // Returning error in structured JSON format
-        res.status(500).json({ 
-            error: 'אירעה שגיאה בעת עיבוד הבקשה שלך' // Translated to Hebrew
-        });
+        res.status(500).json({ error: 'אירעה שגיאה בעת עיבוד הבקשה שלך' });
     }
 });
 
