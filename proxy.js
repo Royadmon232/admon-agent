@@ -7,6 +7,7 @@ import emailjs from 'emailjs-com';
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import axios from 'axios';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -49,6 +50,17 @@ const db = new sqlite3.Database('dashboard.sqlite', (err) => {
         console.error('Error opening database:', err);
     }
 });
+
+// Helper function to get next question from n8n webhook
+async function getNextQuestionFromN8n(session, message) {
+  const res = await axios.post("https://roy200423.app.n8n.cloud/webhook/insurance-lead", {
+    licensePlate: session.answers?.licensePlate || "",
+    insuranceTypes: session.answers?.insuranceTypes || [],
+    index: session.index || 0,
+    answers: session.answers || {}
+  });
+  return res.data;
+}
 
 // Function to send email with PDF using EmailJS
 async function sendEmailWithPDF(pdfBlob) {
@@ -108,7 +120,7 @@ app.post('/api/chat', async (req, res) => {
             const result = await getNextQuestionFromN8n(session, message);
             return res.json({ 
                 type: 'flow', 
-                question: result.text, 
+                question: result.question, 
                 options: result.options || [], 
                 id: result.parameter,
                 done: result.done 
@@ -201,15 +213,17 @@ app.post('/chat', async (req, res) => {
 
         // Check for keywords to decide flow
         if (message.includes('ביטוח רכב') || message.includes('הצעת מחיר')) {
-            // Import and call startFlow from flow.js
-            const { startFlow } = await import('./flow.js');
-            const firstQuestion = startFlow();
-
+            const session = {
+                index: 0,
+                answers: {}
+            };
+            const result = await getNextQuestionFromN8n(session, message);
             return res.json({
                 type: 'flow',
-                question: firstQuestion.question,
-                options: firstQuestion.options || [],
-                id: firstQuestion.id
+                question: result.question,
+                options: result.options || [],
+                id: result.parameter,
+                done: result.done
             });
         }
 
