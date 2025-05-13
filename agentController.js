@@ -5,7 +5,6 @@ import sqlite3 from 'sqlite3';
 import { open } from 'sqlite';
 import express from 'express';
 import fs from 'fs';
-import { startFlow } from './flow.js';
 
 const router = express.Router();
 
@@ -149,22 +148,68 @@ function enhanceResponse(response) {
     return `${response} ${randomPhrase}`;
 }
 
+// Helper function to get next question from n8n webhook
+async function getNextQuestionFromN8n(session, message) {
+  try {
+    const res = await axios.post("https://roy200423.app.n8n.cloud/webhook/insurance-lead", {
+      licensePlate: session.answers?.licensePlate || "",
+      insuranceTypes: session.answers?.insuranceTypes || [],
+      index: session.index || 0,
+      answers: session.answers || {}
+    });
+
+    const { index, question, parameter, type, options, done, message: finalMsg } = res.data;
+
+    if (done) {
+      return { text: finalMsg, done: true };
+    }
+
+    // Update session for next question
+    session.index = index + 1;
+    session.answers[parameter] = message;
+
+    return {
+      text: question,
+      parameter,
+      type: type || "dropdown",
+      options: options || [],
+      done: false
+    };
+  } catch (e) {
+    console.error("n8n request error:", e.message);
+    return { text: "An error occurred during the form. Please try again later.", done: true };
+  }
+}
+
 // Main function to determine which tool to use
 export async function handleUserMessage(message) {
     try {
         // Check if a quote session is active
         if (activeQuoteSession) {
             // Continue with the current quote flow
-            return 'אנחנו כבר בתהליך הצעת מחיר. אנא המשך עם השאלות.';
+            const session = {
+                index: 0,
+                answers: {}
+            };
+            const result = await getNextQuestionFromN8n(session, message);
+            if (result.done) {
+                activeQuoteSession = false;
+            }
+            return result.text;
         }
 
         // Check for car insurance queries
         if (isCarInsuranceQuery(message)) {
             // Trigger the question flow system
             activeQuoteSession = true;
-            startFlow();
-            return 'אני אעזור לך לקבל הצעת מחיר לביטוח רכב. בוא נתחיל עם כמה שאלות פשוטות.';
+            const session = {
+                index: 0,
+                answers: {}
+            };
+            const result = await getNextQuestionFromN8n(session, message);
+            return result.text;
         }
+
         // Check for vehicle-related queries
         if (isVehicleQuery(message)) {
             const licensePlate = extractLicensePlate(message);
@@ -187,9 +232,6 @@ export async function handleUserMessage(message) {
     } catch (error) {
         console.error('Error handling user message:', error);
         throw error;
-    } finally {
-        // Reset the session state if needed
-        activeQuoteSession = false;
     }
 }
 

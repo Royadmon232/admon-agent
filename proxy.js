@@ -101,9 +101,18 @@ app.post('/api/chat', async (req, res) => {
 
         // Check for flow-related keywords
         if (message.includes('ביטוח רכב') || message.includes('הצעת מחיר') || message.includes('חובה') || message.includes('צד ג') || message.includes('מקיף')) {
-            const { startFlow } = await import('./flow.js');
-            const firstQuestion = startFlow();
-            return res.json({ type: 'flow', question: firstQuestion.question, options: firstQuestion.options || [], id: firstQuestion.id });
+            const session = {
+                index: 0,
+                answers: {}
+            };
+            const result = await getNextQuestionFromN8n(session, message);
+            return res.json({ 
+                type: 'flow', 
+                question: result.text, 
+                options: result.options || [], 
+                id: result.parameter,
+                done: result.done 
+            });
         }
 
         // Fallback to OpenAI
