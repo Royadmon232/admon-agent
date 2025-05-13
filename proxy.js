@@ -52,14 +52,17 @@ const db = new sqlite3.Database('dashboard.sqlite', (err) => {
 });
 
 // Helper function to get next question from n8n webhook
-async function getNextQuestionFromN8n(session, message) {
-  const res = await axios.post("https://roy200423.app.n8n.cloud/webhook/insurance-lead", {
-    licensePlate: session.answers?.licensePlate || "",
-    insuranceTypes: session.answers?.insuranceTypes || [],
-    index: session.index || 0,
-    answers: session.answers || {}
-  });
-  return res.data;
+async function getNextQuestionFromN8n(message, sessionMemory) {
+  try {
+    const res = await axios.post("https://roy200423.app.n8n.cloud/webhook/insurance-lead", {
+      message,
+      sessionMemory
+    });
+    return res.data;
+  } catch (error) {
+    console.error('Error calling n8n webhook:', error);
+    throw error;
+  }
 }
 
 // Function to send email with PDF using EmailJS
@@ -113,14 +116,10 @@ app.post('/api/chat', async (req, res) => {
 
         // Check for flow-related keywords
         if (message.includes('ביטוח רכב') || message.includes('הצעת מחיר') || message.includes('חובה') || message.includes('צד ג') || message.includes('מקיף')) {
-            const session = {
-                index: 0,
-                answers: {}
-            };
-            const result = await getNextQuestionFromN8n(session, message);
+            const result = await getNextQuestionFromN8n(message, sessionMemory);
             return res.json({ 
                 type: 'flow', 
-                question: result.question, 
+                question: result.text,
                 options: result.options || [], 
                 id: result.parameter,
                 done: result.done 
@@ -213,14 +212,10 @@ app.post('/chat', async (req, res) => {
 
         // Check for keywords to decide flow
         if (message.includes('ביטוח רכב') || message.includes('הצעת מחיר')) {
-            const session = {
-                index: 0,
-                answers: {}
-            };
-            const result = await getNextQuestionFromN8n(session, message);
+            const result = await getNextQuestionFromN8n(message, sessionMemory);
             return res.json({
                 type: 'flow',
-                question: result.question,
+                question: result.text,
                 options: result.options || [],
                 id: result.parameter,
                 done: result.done
