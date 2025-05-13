@@ -181,54 +181,36 @@ async function getNextQuestionFromN8n(session, message) {
   }
 }
 
-// Main function to determine which tool to use
+// Main function to determine message type and routing
 export async function handleUserMessage(message) {
     try {
-        // Check if a quote session is active
-        if (activeQuoteSession) {
-            // Continue with the current quote flow
-            const session = {
-                index: 0,
-                answers: {}
-            };
-            const result = await getNextQuestionFromN8n(session, message);
-            if (result.done) {
-                activeQuoteSession = false;
-            }
-            return result.text;
-        }
-
-        // Check for car insurance queries
-        if (isCarInsuranceQuery(message)) {
-            // Trigger the question flow system
-            activeQuoteSession = true;
-            const session = {
-                index: 0,
-                answers: {}
-            };
-            const result = await getNextQuestionFromN8n(session, message);
-            return result.text;
-        }
-
         // Check for vehicle-related queries
         if (isVehicleQuery(message)) {
             const licensePlate = extractLicensePlate(message);
             if (licensePlate) {
-                // Check if the license plate was already processed
-                if (!processedPlates.has(licensePlate)) {
-                    processedPlates.add(licensePlate);
-                }
                 const vehicleData = await fetchVehicleData(licensePlate);
-                return enhanceResponse(vehicleData.details);
-            } else {
-                return enhanceResponse('לא הצלחתי לזהות את מספר הרכב. נסה לכתוב רק את המספר.');
+                return {
+                    type: 'vehicle',
+                    details: vehicleData.details
+                };
             }
-        } else if (message.includes('הצעת מחיר')) {
-            return enhanceResponse(calculateInsuranceQuote({ age: 30, car: 'Toyota' })); // Example user data
-        } else {
-            // Fallback to OpenAI for other queries
-            return null; // Return null to indicate this should be handled by OpenAI
+            return {
+                type: 'vehicle',
+                details: 'לא הצלחתי לזהות את מספר הרכב. נסה לכתוב רק את המספר.'
+            };
         }
+
+        // Check for insurance quote queries
+        if (isCarInsuranceQuery(message) || message.includes('הצעת מחיר')) {
+            return {
+                type: 'quote'
+            };
+        }
+
+        // Default to AI response
+        return {
+            type: 'ai'
+        };
     } catch (error) {
         console.error('Error handling user message:', error);
         throw error;

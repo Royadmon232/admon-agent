@@ -108,37 +108,43 @@ app.post('/api/chat', async (req, res) => {
     try {
         const { message, sessionMemory } = req.body;
 
-        // Use handleUserMessage to detect vehicle-related queries
-        const agentResponse = await handleUserMessage(message);
-        if (agentResponse !== null) {
-            return res.json({ type: 'vehicle_lookup', reply: agentResponse });
+        // Get message type from agentController
+        const messageType = await handleUserMessage(message);
+
+        // Route based on message type
+        switch (messageType.type) {
+            case 'vehicle':
+                return res.json({ 
+                    type: 'vehicle_lookup', 
+                    reply: messageType.details 
+                });
+
+            case 'quote':
+                const result = await getNextQuestionFromN8n(message, sessionMemory);
+                return res.json({ 
+                    type: 'flow', 
+                    question: result.text,
+                    options: result.options || [], 
+                    id: result.parameter,
+                    done: result.done 
+                });
+
+            case 'ai':
+            default:
+                // Fallback to OpenAI
+                const completion = await openai.chat.completions.create({
+                    model: 'gpt-3.5-turbo',
+                    messages: [
+                        { role: 'system', content: "You are an Israeli insurance assistant named Doni. Respond only in Hebrew. Your role is to guide the customer to choose the right insurance. Be professional and persuasive." },
+                        { role: 'user', content: message }
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 500
+                });
+
+                const aiResponse = completion.choices[0].message.content;
+                return res.json({ type: 'openai', reply: aiResponse });
         }
-
-        // Check for flow-related keywords
-        if (message.includes('ביטוח רכב') || message.includes('הצעת מחיר') || message.includes('חובה') || message.includes('צד ג') || message.includes('מקיף')) {
-            const result = await getNextQuestionFromN8n(message, sessionMemory);
-            return res.json({ 
-                type: 'flow', 
-                question: result.text,
-                options: result.options || [], 
-                id: result.parameter,
-                done: result.done 
-            });
-        }
-
-        // Fallback to OpenAI
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo',
-            messages: [
-                { role: 'system', content: "You are an Israeli insurance assistant named Doni. Respond only in Hebrew. Your role is to guide the customer to choose the right insurance. Be professional and persuasive." },
-                { role: 'user', content: message }
-            ],
-            temperature: 0.7,
-            max_tokens: 500
-        });
-
-        const aiResponse = completion.choices[0].message.content;
-        res.json({ type: 'openai', reply: aiResponse });
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ error: 'אירעה שגיאה בעת עיבוד הבקשה שלך' });
@@ -205,39 +211,51 @@ app.post('/api/contact-human', async (req, res) => {
     });
 });
 
-// Modify the `/chat` POST route to return a consistent JSON response structure
+// Modify the `/chat` POST route to use the same routing logic
 app.post('/chat', async (req, res) => {
     try {
         const { message, sessionMemory } = req.body;
 
-        // Check for keywords to decide flow
-        if (message.includes('ביטוח רכב') || message.includes('הצעת מחיר')) {
-            const result = await getNextQuestionFromN8n(message, sessionMemory);
-            return res.json({
-                type: 'flow',
-                question: result.text,
-                options: result.options || [],
-                id: result.parameter,
-                done: result.done
-            });
+        // Get message type from agentController
+        const messageType = await handleUserMessage(message);
+
+        // Route based on message type
+        switch (messageType.type) {
+            case 'vehicle':
+                return res.json({ 
+                    type: 'vehicle_lookup', 
+                    reply: messageType.details 
+                });
+
+            case 'quote':
+                const result = await getNextQuestionFromN8n(message, sessionMemory);
+                return res.json({
+                    type: 'flow',
+                    question: result.text,
+                    options: result.options || [],
+                    id: result.parameter,
+                    done: result.done
+                });
+
+            case 'ai':
+            default:
+                // Otherwise, call OpenAI
+                const completion = await openai.chat.completions.create({
+                    model: 'gpt-3.5-turbo',
+                    messages: [
+                        { role: 'system', content: 'You are an insurance assistant in Hebrew.' },
+                        { role: 'user', content: message }
+                    ],
+                    temperature: 0.7,
+                    max_tokens: 500
+                });
+
+                const aiResponse = completion.choices[0].message.content;
+                return res.json({
+                    type: 'openai',
+                    reply: aiResponse
+                });
         }
-
-        // Otherwise, call OpenAI
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo',
-            messages: [
-                { role: 'system', content: 'You are an insurance assistant in Hebrew.' },
-                { role: 'user', content: message }
-            ],
-            temperature: 0.7,
-            max_tokens: 500
-        });
-
-        const aiResponse = completion.choices[0].message.content;
-        res.json({
-            type: 'openai',
-            reply: aiResponse
-        });
     } catch (error) {
         console.error('OpenAI request failed:', error);
         res.status(500).json({ error: 'OpenAI request failed' });
