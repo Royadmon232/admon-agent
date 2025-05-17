@@ -26,7 +26,7 @@ import cors from 'cors';
 import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import stringSimilarity from 'string-similarity';
-import insuranceKnowledgeBase from './insurance_knowledge.json' assert { type: 'json' };
+import fs from 'fs';
 
 dotenv.config();
 
@@ -99,6 +99,11 @@ This section defines a small, structured knowledge base with relevant home insur
 - אם נמצאה תשובה, נשלב אותה עם היכולות השיחיות של GPT (נעביר אותה כ-context).
 - אם לא, GPT יענה כרגיל.
 */
+
+const insuranceKnowledgeBase = JSON.parse(fs.readFileSync('./insurance_knowledge.json', 'utf8'));
+const KNOWLEDGE = insuranceKnowledgeBase.insurance_home_il_qa
+  .filter(r => Array.isArray(r.embedding))
+  .map(r => ({ q: r.question, a: r.answer, v: r.embedding }));
 
 // =============================
 // Helper: Find answer in knowledge base
@@ -547,11 +552,16 @@ app.post('/webhook', async (req, res) => {
       2. אם נמצאה תשובה רלוונטית, היא נשלחת למשתמש בעברית תקינה ומקצועית, עם הפניה '(מתוך מאגר הידע הרשמי)', ונשמרת בזיכרון השיחה.
       3. אם לא, הבוט פונה ל-GPT כרגיל.
       */
-      let knowledgeBaseAnswer = findKnowledgeBaseAnswer(userMessage);
+      const kbAnswer = await semanticLookup(userMessage);
+      if (kbAnswer) {
+        await sendWhatsAppReply(kbAnswer, from);
+        return;               // skip string-similarity + GPT
+      }
+      // const kbAnswer = findKnowledgeBaseAnswer(userMessage);
       let conversationHistory;
-      if (knowledgeBaseAnswer) {
+      if (kbAnswer) {
         // Add reference to knowledge base answers
-        const kbReply = `${knowledgeBaseAnswer} (מתוך מאגר הידע הרשמי)`;
+        const kbReply = `${kbAnswer} (מתוך מאגר הידע הרשמי)`;
         conversationMemory[from].push({ role: 'assistant', content: kbReply });
         if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
           conversationMemory[from] = conversationMemory[from].slice(-MEMORY_LIMIT * 2);
@@ -646,4 +656,34 @@ app.post('/webhook', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-}); 
+});
+
+// ---- cosine helper for semantic search ----
+export function cosine(a, b) {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na  += a[i] * a[i];
+    nb  += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+const EMB_MODEL = "text-embedding-3-small";
+const SEMANTIC_THRESHOLD = 0.83;  // tune later
+
+async function semanticLookup(userMsg) {
+  const { data } = await axios.post(
+    "https://api.openai.com/v1/embeddings",
+    { model: EMB_MODEL, input: userMsg },
+    { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
+  );
+  const u = data.data[0].embedding;
+
+  let best = { score: 0, answer: null };
+  for (const row of KNOWLEDGE) {
+    const score = cosine(u, row.v);
+    if (score > best.score) best = { score, answer: row.a };
+  }
+  return best.score >= SEMANTIC_THRESHOLD ? best.answer : null;
+} 
