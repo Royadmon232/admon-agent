@@ -20,13 +20,13 @@ Meta/Facebook/WhatsApp setup required:
 - More info: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/
 */
 
-import express from 'express';
-import axios from 'axios';
-import cors from 'cors';
-import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
-import stringSimilarity from 'string-similarity';
-import fs from 'fs';
+import express from "express";
+import axios from "axios";
+import cors from "cors";
+import bodyParser from "body-parser";
+import dotenv from "dotenv";
+import stringSimilarity from "string-similarity";
+import fs from "fs";
 
 dotenv.config();
 
@@ -100,38 +100,12 @@ This section defines a small, structured knowledge base with relevant home insur
 - אם לא, GPT יענה כרגיל.
 */
 
-const insuranceKnowledgeBase = JSON.parse(fs.readFileSync('./insurance_knowledge.json', 'utf8'));
+const insuranceKnowledgeBase = JSON.parse(
+  fs.readFileSync("./insurance_knowledge.json", "utf8"),
+);
 const KNOWLEDGE = insuranceKnowledgeBase.insurance_home_il_qa
-  .filter(r => Array.isArray(r.embedding))
-  .map(r => ({ q: r.question, a: r.answer, v: r.embedding }));
-
-// =============================
-// Helper: Find answer in knowledge base
-// =============================
-/*
-Searches the knowledge base for a relevant answer based on the user's message.
-מחפש תשובה רלוונטית בבסיס הידע לפי הודעת המשתמש.
-*/
-function findKnowledgeBaseAnswer(userMessage) {
-  /*
-    Knowledge Base Lookup with Fuzzy Matching (RAG)
-    ------------------------------------------------
-    This function checks the insurance knowledge base for a close match to the user's message using fuzzy string matching.
-    If a match above the similarity threshold is found, returns the answer from the knowledge base.
-    Otherwise, returns null to let GPT handle the response.
-    פונקציה זו בודקת האם יש שאלה דומה בבסיס הידע באמצעות השוואה "מטושטשת" (fuzzy).
-    אם נמצאה התאמה מעל סף הדמיון, מוחזרת התשובה מבסיס הידע.
-    אם לא, הפנייה תעבור ל-GPT כרגיל.
-  */
-  const threshold = 0.7; // Similarity threshold (0-1)
-  const userText = userMessage.replace(/["'.,!?\-]/g, '').toLowerCase();
-  const questions = insuranceKnowledgeBase.map(entry => entry.question.replace(/["'.,!?\-]/g, '').toLowerCase());
-  const { bestMatch, bestMatchIndex } = stringSimilarity.findBestMatch(userText, questions);
-  if (bestMatch.rating >= threshold) {
-    return insuranceKnowledgeBase[bestMatchIndex].answer;
-  }
-  return null;
-}
+  .filter((r) => Array.isArray(r.embedding))
+  .map((r) => ({ q: r.question, a: r.answer, v: r.embedding }));
 
 // =============================
 // Dynamic Questionnaire & Needs Analysis
@@ -152,11 +126,19 @@ This section implements a dynamic questionnaire system for needs analysis.
 
 // Define the key info fields for insurance needs analysis
 const NEEDS_FIELDS = [
-  { key: 'address', question: 'מהי כתובת הדירה שברצונך לבטח?' },
-  { key: 'apartmentSize', question: 'מהו גודל הדירה במ"ר?' },
-  { key: 'valuables', question: 'האם יש ברשותך חפצים יקרי ערך (כגון תכשיטים, יצירות אמנות, ציוד יקר)?' },
-  { key: 'security', question: 'האם קיימים אמצעי מיגון מיוחדים בדירה (אזעקה, מצלמות, דלתות ביטחון)?' },
-  { key: 'residents', question: 'כמה דיירים מתגוררים בדירה?' }
+  { key: "address", question: "מהי כתובת הדירה שברצונך לבטח?" },
+  { key: "apartmentSize", question: 'מהו גודל הדירה במ"ר?' },
+  {
+    key: "valuables",
+    question:
+      "האם יש ברשותך חפצים יקרי ערך (כגון תכשיטים, יצירות אמנות, ציוד יקר)?",
+  },
+  {
+    key: "security",
+    question:
+      "האם קיימים אמצעי מיגון מיוחדים בדירה (אזעקה, מצלמות, דלתות ביטחון)?",
+  },
+  { key: "residents", question: "כמה דיירים מתגוררים בדירה?" },
 ];
 
 // In-memory user session data: { [userPhone: string]: { [field]: value } }
@@ -176,20 +158,29 @@ function getNextMissingField(userId) {
 // Helper: Try to extract answers from user message (simple keyword/value matching for demo)
 function extractFieldValue(fieldKey, userMessage) {
   // This can be replaced with NLP or regex for more advanced extraction
-  if (fieldKey === 'address' && userMessage.match(/רחוב|כתובת|עיר|מספר/)) {
+  if (fieldKey === "address" && userMessage.match(/רחוב|כתובת|עיר|מספר/)) {
     return userMessage;
   }
-  if (fieldKey === 'apartmentSize' && userMessage.match(/\d+\s?מ"ר|גודל|שטח/)) {
+  if (fieldKey === "apartmentSize" && userMessage.match(/\d+\s?מ"ר|גודל|שטח/)) {
     const match = userMessage.match(/(\d+)\s?מ"ר/);
     return match ? match[1] : userMessage;
   }
-  if (fieldKey === 'valuables' && userMessage.match(/(כן|לא|תכשיט|יקר|אמנות|ציוד)/)) {
+  if (
+    fieldKey === "valuables" &&
+    userMessage.match(/(כן|לא|תכשיט|יקר|אמנות|ציוד)/)
+  ) {
     return userMessage;
   }
-  if (fieldKey === 'security' && userMessage.match(/אזעקה|מצלמה|ביטחון|מיגון/)) {
+  if (
+    fieldKey === "security" &&
+    userMessage.match(/אזעקה|מצלמה|ביטחון|מיגון/)
+  ) {
     return userMessage;
   }
-  if (fieldKey === 'residents' && userMessage.match(/\d+\s?(דייר|אנשים|נפשות)/)) {
+  if (
+    fieldKey === "residents" &&
+    userMessage.match(/\d+\s?(דייר|אנשים|נפשות)/)
+  ) {
     const match = userMessage.match(/(\d+)\s?(דייר|אנשים|נפשות)/);
     return match ? match[1] : userMessage;
   }
@@ -231,15 +222,15 @@ function buildRecommendationMessage(session, quote) {
   // Build a friendly, professional summary in Hebrew
   let summary = `בהתבסס על הפרטים שמסרת, אני ממליץ על כיסוי ביטוח דירה הכולל:
 `;
-  summary += `• כתובת: ${session.address || 'לא צוינה'}
+  summary += `• כתובת: ${session.address || "לא צוינה"}
 `;
-  summary += `• גודל דירה: ${session.apartmentSize || 'לא צוין'} מ"ר
+  summary += `• גודל דירה: ${session.apartmentSize || "לא צוין"} מ"ר
 `;
-  summary += `• חפצים יקרי ערך: ${session.valuables || 'לא צוינו'}
+  summary += `• חפצים יקרי ערך: ${session.valuables || "לא צוינו"}
 `;
-  summary += `• אמצעי מיגון: ${session.security || 'לא צוינו'}
+  summary += `• אמצעי מיגון: ${session.security || "לא צוינו"}
 `;
-  summary += `• מספר דיירים: ${session.residents || 'לא צוין'}
+  summary += `• מספר דיירים: ${session.residents || "לא צוין"}
 `;
   summary += `
 הכיסוי המומלץ כולל הגנה מפני נזקי מים, גניבה, אש, צד ג' ועוד, בהתאמה אישית לצרכים שלך.
@@ -247,7 +238,7 @@ function buildRecommendationMessage(session, quote) {
   summary += `המחיר המשוער: כ-₪${quote} לשנה (המחיר עשוי להשתנות בהתאם לפרטים נוספים או הרחבות).
 `;
   summary += `
-אם תרצה לקבל הצעת מחיר מסודרת או לשוחח עם סוכן, אשמח לעזור!`
+אם תרצה לקבל הצעת מחיר מסודרת או לשוחח עם סוכן, אשמח לעזור!`;
   return summary;
 }
 
@@ -268,17 +259,29 @@ This section allows the user to request a human agent at any point.
 
 // Keywords/phrases to detect human agent request (expand as needed)
 const HUMAN_AGENT_KEYWORDS = [
-  'נציג אנושי', 'נציג', 'סוכן אנושי', 'סוכן', 'אני רוצה לדבר עם נציג', 'אני צריך עזרה נוספת',
-  'I want to speak with a human', 'human agent', 'representative', 'need further help', 'talk to a person'
+  "נציג אנושי",
+  "נציג",
+  "סוכן אנושי",
+  "סוכן",
+  "אני רוצה לדבר עם נציג",
+  "אני צריך עזרה נוספת",
+  "I want to speak with a human",
+  "human agent",
+  "representative",
+  "need further help",
+  "talk to a person",
 ];
 
 // Contact details for escalation (customize as needed)
-const HUMAN_AGENT_CONTACT = 'תוכל ליצור קשר עם סוכן אנושי בטלפון: 03-1234567 או במייל: agent@example.com';
+const HUMAN_AGENT_CONTACT =
+  "תוכל ליצור קשר עם סוכן אנושי בטלפון: 03-1234567 או במייל: agent@example.com";
 
 // Helper: Detect if user wants a human agent
 function isHumanAgentRequest(message) {
   const normalized = message.toLowerCase();
-  return HUMAN_AGENT_KEYWORDS.some(keyword => normalized.includes(keyword.toLowerCase()));
+  return HUMAN_AGENT_KEYWORDS.some((keyword) =>
+    normalized.includes(keyword.toLowerCase()),
+  );
 }
 
 // =============================
@@ -298,11 +301,18 @@ This section ensures all user data (chat history, answers, quotes) is handled se
 
 // Helper: Detect "forget me" requests (expand as needed)
 const FORGET_ME_KEYWORDS = [
-  'שכח אותי', 'מחק את כל המידע', 'delete my data', 'forget me', 'erase my data', 'מחק אותי'
+  "שכח אותי",
+  "מחק את כל המידע",
+  "delete my data",
+  "forget me",
+  "erase my data",
+  "מחק אותי",
 ];
 function isForgetMeRequest(message) {
   const normalized = message.toLowerCase();
-  return FORGET_ME_KEYWORDS.some(keyword => normalized.includes(keyword.toLowerCase()));
+  return FORGET_ME_KEYWORDS.some((keyword) =>
+    normalized.includes(keyword.toLowerCase()),
+  );
 }
 
 // =============================
@@ -310,15 +320,15 @@ function isForgetMeRequest(message) {
 // =============================
 // Meta/Facebook will call this endpoint when you set up your webhook in the WhatsApp App dashboard.
 // You must provide the same verify token (WHATSAPP_VERIFY_TOKEN) in both Meta and your .env file.
-app.get('/webhook', (req, res) => {
+app.get("/webhook", (req, res) => {
   const verify_token = WHATSAPP_VERIFY_TOKEN;
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
 
   if (mode && token) {
-    if (mode === 'subscribe' && token === verify_token) {
-      console.log('WEBHOOK_VERIFIED');
+    if (mode === "subscribe" && token === verify_token) {
+      console.log("WEBHOOK_VERIFIED");
       res.status(200).send(challenge);
     } else {
       res.sendStatus(403);
@@ -333,7 +343,7 @@ app.get('/webhook', (req, res) => {
 // =============================
 // Meta/Facebook will POST incoming WhatsApp messages to this endpoint.
 // This handler processes each message, sends it to OpenAI, and replies to the user.
-app.post('/webhook', async (req, res) => {
+app.post("/webhook", async (req, res) => {
   try {
     const entry = req.body.entry?.[0];
     const changes = entry?.changes?.[0];
@@ -359,24 +369,27 @@ app.post('/webhook', async (req, res) => {
         delete conversationMemory[from];
         delete userSessionData[from];
         // Optionally, delete from persistent storage if implemented
-        const forgetMsg = 'כל המידע שלך נמחק מהמערכת בהתאם לבקשתך. אם תרצה להתחיל שיחה חדשה, אשמח לעזור!';
+        const forgetMsg =
+          "כל המידע שלך נמחק מהמערכת בהתאם לבקשתך. אם תרצה להתחיל שיחה חדשה, אשמח לעזור!";
         if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
           await axios.post(
             `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
             {
-              messaging_product: 'whatsapp',
+              messaging_product: "whatsapp",
               to: from,
-              text: { body: forgetMsg }
+              text: { body: forgetMsg },
             },
             {
               headers: {
-                'Authorization': `Bearer ${WHATSAPP_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              }
-            }
+                Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            },
           );
         } else {
-          console.log('WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.');
+          console.log(
+            "WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.",
+          );
         }
         continue; // Skip further processing for this message
       }
@@ -390,27 +403,34 @@ app.post('/webhook', async (req, res) => {
       */
       if (isHumanAgentRequest(userMessage)) {
         const escalationMsg = `אני כאן כדי לעזור, אך כמובן שאפשר גם לדבר עם סוכן אנושי.\n${HUMAN_AGENT_CONTACT}`;
-        conversationMemory[from].push({ role: 'assistant', content: escalationMsg });
+        conversationMemory[from].push({
+          role: "assistant",
+          content: escalationMsg,
+        });
         if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-          conversationMemory[from] = conversationMemory[from].slice(-MEMORY_LIMIT * 2);
+          conversationMemory[from] = conversationMemory[from].slice(
+            -MEMORY_LIMIT * 2,
+          );
         }
         if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
           await axios.post(
             `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
             {
-              messaging_product: 'whatsapp',
+              messaging_product: "whatsapp",
               to: from,
-              text: { body: escalationMsg }
+              text: { body: escalationMsg },
             },
             {
               headers: {
-                'Authorization': `Bearer ${WHATSAPP_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              }
-            }
+                Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            },
           );
         } else {
-          console.log('WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.');
+          console.log(
+            "WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.",
+          );
         }
         continue; // Skip further processing for this message
       }
@@ -421,9 +441,11 @@ app.post('/webhook', async (req, res) => {
       if (!conversationMemory[from]) {
         conversationMemory[from] = [];
       }
-      conversationMemory[from].push({ role: 'user', content: userMessage });
+      conversationMemory[from].push({ role: "user", content: userMessage });
       if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-        conversationMemory[from] = conversationMemory[from].slice(-MEMORY_LIMIT * 2);
+        conversationMemory[from] = conversationMemory[from].slice(
+          -MEMORY_LIMIT * 2,
+        );
       }
 
       // =============================
@@ -448,28 +470,32 @@ app.post('/webhook', async (req, res) => {
       if (nextField) {
         // Ask only the next relevant question (in Hebrew, polite and professional)
         const question = nextField.question;
-        conversationMemory[from].push({ role: 'assistant', content: question });
+        conversationMemory[from].push({ role: "assistant", content: question });
         if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-          conversationMemory[from] = conversationMemory[from].slice(-MEMORY_LIMIT * 2);
+          conversationMemory[from] = conversationMemory[from].slice(
+            -MEMORY_LIMIT * 2,
+          );
         }
         // Send the question directly, skip GPT for this turn
         if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
           await axios.post(
             `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
             {
-              messaging_product: 'whatsapp',
+              messaging_product: "whatsapp",
               to: from,
-              text: { body: question }
+              text: { body: question },
             },
             {
               headers: {
-                'Authorization': `Bearer ${WHATSAPP_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              }
-            }
+                Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            },
           );
         } else {
-          console.log('WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.');
+          console.log(
+            "WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.",
+          );
         }
         continue; // Skip to next message, don't call GPT until all info is collected
       }
@@ -481,28 +507,35 @@ app.post('/webhook', async (req, res) => {
       Once all required info is collected, recommend a suitable coverage and quote.
       לאחר איסוף כל הפרטים, הבוט ממליץ על כיסוי מתאים ומחיר משוער.
       */
-      const allFieldsFilled = NEEDS_FIELDS.every(f => userSessionData[from][f.key]);
+      const allFieldsFilled = NEEDS_FIELDS.every(
+        (f) => userSessionData[from][f.key],
+      );
       if (allFieldsFilled) {
         const quote = calculateInsuranceQuote(userSessionData[from]);
-        const summary = buildRecommendationMessage(userSessionData[from], quote);
-        conversationMemory[from].push({ role: 'assistant', content: summary });
+        const summary = buildRecommendationMessage(
+          userSessionData[from],
+          quote,
+        );
+        conversationMemory[from].push({ role: "assistant", content: summary });
         if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-          conversationMemory[from] = conversationMemory[from].slice(-MEMORY_LIMIT * 2);
+          conversationMemory[from] = conversationMemory[from].slice(
+            -MEMORY_LIMIT * 2,
+          );
         }
         if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
           await axios.post(
             `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
             {
-              messaging_product: 'whatsapp',
+              messaging_product: "whatsapp",
               to: from,
-              text: { body: summary }
+              text: { body: summary },
             },
             {
               headers: {
-                'Authorization': `Bearer ${WHATSAPP_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              }
-            }
+                Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            },
           );
           // =============================
           // Feedback Request: After recommendation
@@ -511,23 +544,26 @@ app.post('/webhook', async (req, res) => {
           After sending the recommendation, ask the user for feedback about the bot and the insurance advice.
           לאחר שליחת ההמלצה, נבקש מהמשתמש משוב על השירות.
           */
-          const feedbackMsg = 'אשמח לדעת מה דעתך על השירות שקיבלת מהבוט ועל ההמלצה לביטוח הדירה. האם יש משהו שנוכל לשפר?';
+          const feedbackMsg =
+            "אשמח לדעת מה דעתך על השירות שקיבלת מהבוט ועל ההמלצה לביטוח הדירה. האם יש משהו שנוכל לשפר?";
           await axios.post(
             `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
             {
-              messaging_product: 'whatsapp',
+              messaging_product: "whatsapp",
               to: from,
-              text: { body: feedbackMsg }
+              text: { body: feedbackMsg },
             },
             {
               headers: {
-                'Authorization': `Bearer ${WHATSAPP_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              }
-            }
+                Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
+                "Content-Type": "application/json",
+              },
+            },
           );
         } else {
-          console.log('WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.');
+          console.log(
+            "WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.",
+          );
         }
         continue; // Skip GPT for this turn, as the recommendation is sent directly
       }
@@ -538,84 +574,66 @@ app.post('/webhook', async (req, res) => {
       /*
       Retrieval-Augmented Generation (RAG) Flow:
       ------------------------------------------
-      1. When a user message arrives, the bot first checks the structured knowledge base (insurance_knowledge.json) for a close match using fuzzy string matching.
-      2. If a relevant answer is found (above the similarity threshold), the bot:
+      1. When a user message arrives, the bot first checks the structured knowledge base (insurance_knowledge.json) for a close match using semantic search.
+      2. If a relevant answer is found, the bot:
          - Sends the answer directly to the user (in clear, professional Hebrew, as required by SYSTEM_PROMPT),
          - Appends a short reference: '(מתוך מאגר הידע הרשמי)' to indicate the answer is from the official knowledge base,
          - Logs the Q&A to the user's conversation memory for context,
          - Skips the GPT call for this turn.
-      3. If no match is found, the bot proceeds as usual to GPT, maintaining all conversation memory and features.
-      
-      הרחבה על זרימת RAG:
-      -------------------
-      1. הבוט בודק תחילה את מאגר הידע המובנה (insurance_knowledge.json) באמצעות השוואה מטושטשת.
-      2. אם נמצאה תשובה רלוונטית, היא נשלחת למשתמש בעברית תקינה ומקצועית, עם הפניה '(מתוך מאגר הידע הרשמי)', ונשמרת בזיכרון השיחה.
-      3. אם לא, הבוט פונה ל-GPT כרגיל.
+      3. If no match is found, the bot tries a lexical (fuzzy) fallback.
+      4. If still no answer, the bot proceeds as usual to GPT, maintaining all conversation memory and features.
       */
-      const kbAnswer = await semanticLookup(userMessage);
+      let kbAnswer = await semanticLookup(userMessage);
+
+      // ---------- fallback: lexical similarity ----------
+      if (
+        !kbAnswer &&
+        stringSimilarity &&
+        insuranceKnowledgeBase.insurance_home_il_qa
+      ) {
+        const qs = insuranceKnowledgeBase.insurance_home_il_qa.map(
+          (r) => r.question,
+        );
+        const { bestMatch } = stringSimilarity.findBestMatch(userMessage, qs);
+        if (bestMatch.rating >= 0.75) {
+          kbAnswer =
+            insuranceKnowledgeBase.insurance_home_il_qa[
+              bestMatch.bestMatchIndex
+            ].answer;
+        }
+      }
+
       if (kbAnswer) {
         await sendWhatsAppReply(kbAnswer, from);
-        return;               // skip string-similarity + GPT
-      }
-      // const kbAnswer = findKnowledgeBaseAnswer(userMessage);
-      let conversationHistory;
-      if (kbAnswer) {
-        // Add reference to knowledge base answers
-        const kbReply = `${kbAnswer} (מתוך מאגר הידע הרשמי)`;
-        conversationMemory[from].push({ role: 'assistant', content: kbReply });
-        if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-          conversationMemory[from] = conversationMemory[from].slice(-MEMORY_LIMIT * 2);
-        }
-        if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
-          await axios.post(
-            `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-            {
-              messaging_product: 'whatsapp',
-              to: from,
-              text: { body: kbReply }
-            },
-            {
-              headers: {
-                'Authorization': `Bearer ${WHATSAPP_API_TOKEN}`,
-                'Content-Type': 'application/json'
-              }
-            }
-          );
-        } else {
-          console.log('WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.');
-        }
-        continue; // Skip GPT for this turn, as the answer is from the knowledge base
-      } else {
-        conversationHistory = [
-          { role: 'system', content: SYSTEM_PROMPT },
-          ...conversationMemory[from]
-        ];
+        return; // skip GPT
       }
 
       // =============================
       // 3. Send user message and history to OpenAI GPT-4/4o
       // =============================
       const openaiRes = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
+        "https://api.openai.com/v1/chat/completions",
         {
-          model: 'gpt-4o',
-          messages: conversationHistory,
+          model: "gpt-4o",
+          messages: conversationMemory[from],
           max_tokens: 300,
-          temperature: 0.7
+          temperature: 0.7,
         },
         {
           headers: {
-            'Authorization': `Bearer ${OPENAI_API_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        }
+            Authorization: `Bearer ${OPENAI_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        },
       );
       const gptReply = openaiRes.data.choices?.[0]?.message?.content?.trim();
       console.log(`[OUTGOING] To: ${from} | Message: ${gptReply}`);
 
-      conversationMemory[from].push({ role: 'assistant', content: gptReply });
+      conversationMemory[from].push({ role: "assistant", content: gptReply });
       if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-        conversationMemory[from] = conversationMemory[from].slice(-MEMORY_LIMIT * 2);
+        conversationMemory[from] = conversationMemory[from].slice(
+          -MEMORY_LIMIT * 2,
+        );
       }
 
       // =============================
@@ -628,24 +646,29 @@ app.post('/webhook', async (req, res) => {
         await axios.post(
           `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
           {
-            messaging_product: 'whatsapp',
+            messaging_product: "whatsapp",
             to: from,
-            text: { body: gptReply }
+            text: { body: gptReply },
           },
           {
             headers: {
-              'Authorization': `Bearer ${WHATSAPP_API_TOKEN}`,
-              'Content-Type': 'application/json'
-            }
-          }
+              Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
+              "Content-Type": "application/json",
+            },
+          },
         );
       } else {
-        console.log('WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.');
+        console.log(
+          "WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.",
+        );
       }
     }
     res.sendStatus(200);
   } catch (error) {
-    console.error('Error handling webhook:', error?.response?.data || error.message);
+    console.error(
+      "Error handling webhook:",
+      error?.response?.data || error.message,
+    );
     res.sendStatus(500);
   }
 });
@@ -660,23 +683,25 @@ app.listen(PORT, () => {
 
 // ---- cosine helper for semantic search ----
 export function cosine(a, b) {
-  let dot = 0, na = 0, nb = 0;
+  let dot = 0,
+    na = 0,
+    nb = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
-    na  += a[i] * a[i];
-    nb  += b[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
   }
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
 const EMB_MODEL = "text-embedding-3-small";
-const SEMANTIC_THRESHOLD = 0.83;  // tune later
+const SEMANTIC_THRESHOLD = 0.83; // tune later
 
 async function semanticLookup(userMsg) {
   const { data } = await axios.post(
     "https://api.openai.com/v1/embeddings",
     { model: EMB_MODEL, input: userMsg },
-    { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
+    { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } },
   );
   const u = data.data[0].embedding;
 
@@ -686,4 +711,4 @@ async function semanticLookup(userMsg) {
     if (score > best.score) best = { score, answer: row.a };
   }
   return best.score >= SEMANTIC_THRESHOLD ? best.answer : null;
-} 
+}
