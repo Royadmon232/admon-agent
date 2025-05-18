@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: admon-agent           # leave as-is or adjust to your Render name
+    env: node
+
+    # ---------- Build step ----------
+    buildCommand: |
+      npm install
+      npm run embed              # ← creates embeddings using OPENAI_API_KEY
+      npm run lint || true       # ignore exit code if nothing to fix
+
+    # ---------- Start step ----------
+    startCommand: npm start 

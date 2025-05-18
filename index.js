@@ -583,29 +583,26 @@ app.post("/webhook", async (req, res) => {
       3. If no match is found, the bot tries a lexical (fuzzy) fallback.
       4. If still no answer, the bot proceeds as usual to GPT, maintaining all conversation memory and features.
       */
-      let kbAnswer = await semanticLookup(userMessage);
+      const cleanUserText = userMessage;
+      const similarity = stringSimilarity;
+      const fromPhone = from;
 
-      // ---------- fallback: lexical similarity ----------
-      if (
-        !kbAnswer &&
-        stringSimilarity &&
-        insuranceKnowledgeBase.insurance_home_il_qa
-      ) {
-        const qs = insuranceKnowledgeBase.insurance_home_il_qa.map(
-          (r) => r.question,
-        );
-        const { bestMatch } = stringSimilarity.findBestMatch(userMessage, qs);
+      // 1. Semantic RAG (vector)
+      let kbAnswer = await semanticLookup(cleanUserText);
+
+      // 2. Fallback lexical similarity
+      if (!kbAnswer && similarity && insuranceKnowledgeBase.insurance_home_il_qa) {
+        const qs = insuranceKnowledgeBase.insurance_home_il_qa.map(r => r.question);
+        const { bestMatch } = similarity.findBestMatch(cleanUserText, qs);
         if (bestMatch.rating >= 0.75) {
-          kbAnswer =
-            insuranceKnowledgeBase.insurance_home_il_qa[
-              bestMatch.bestMatchIndex
-            ].answer;
+          kbAnswer = insuranceKnowledgeBase.insurance_home_il_qa[bestMatch.bestMatchIndex].answer;
         }
       }
 
+      // 3. Respond from KB or ask OpenAI
       if (kbAnswer) {
-        await sendWhatsAppReply(kbAnswer, from);
-        return; // skip GPT
+        await sendWhatsAppReply(kbAnswer, fromPhone);
+        return;          // OpenAI not needed
       }
 
       // =============================
