@@ -31,6 +31,7 @@ import fs from "fs";
 dotenv.config();
 
 const app = express();
+app.use(express.static("public"));
 app.use(cors());
 app.use(bodyParser.json());
 
@@ -118,10 +119,8 @@ This section implements a dynamic questionnaire system for needs analysis.
 - Each answer is stored in the user's session memory.
 
 שאלון דינמי וניתוח צרכים:
-- לכל משתמש נשמר אילו פרטי מידע נאספו (כתובת, שטח, תכולה, תכשיטים וכו').
-- הבוט מזהה מה חסר ושואל רק את השאלה הבאה הרלוונטית.
-- לא חוזר על שאלות שכבר נענו, ומתאים את השיחה לתשובות המשתמש.
-- כל תשובה נשמרת בזיכרון הסשן של המשתמש.
+- לכל משתמש ננסה לחלץ תשובות מההודעה לשדות הצרכים, ונשמור ב-userSessionData.
+- אם חסר מידע, נשאל רק את השאלה הבאה הרלוונטית.
 */
 
 // Define the key info fields for insurance needs analysis
@@ -315,6 +314,260 @@ function isForgetMeRequest(message) {
   );
 }
 
+const QUOTE_TRIGGERS = [
+  "הצעת מחיר", "כמה עולה", "ביטוח דירה", "מבקש הצעת", "offer", "quote"
+];
+
+function isQuoteIntent(text) {
+  const lowerText = text.toLowerCase(); // Normalize for case-insensitive matching
+  return QUOTE_TRIGGERS.some(t => lowerText.includes(t.toLowerCase()));
+}
+
+// =============================
+// Core Message Processing Logic
+// =============================
+async function processMessage(userMessageText, fromId, simulateMode = false) {
+  let replyToSend = "";
+
+  // Ensure conversationMemory and userSessionData for 'fromId' exist
+  if (!conversationMemory[fromId]) {
+    conversationMemory[fromId] = [{ role: "system", content: SYSTEM_PROMPT }];
+  }
+  if (!userSessionData[fromId]) {
+    userSessionData[fromId] = {}; // .stage will be added here if quote intent is detected
+  }
+
+  // Path 1: Data Privacy - Handle "forget me" requests
+  if (isForgetMeRequest(userMessageText)) {
+    delete conversationMemory[fromId];
+    delete userSessionData[fromId];
+    replyToSend = "כל המידע שלך נמחק מהמערכת בהתאם לבקשתך. אם תרצה להתחיל שיחה חדשה, אשמח לעזור!";
+    if (!simulateMode && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
+      await axios.post(
+        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+      );
+    } else if (!simulateMode) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (WhatsApp send skipped due to missing config)`);
+    }
+    if (simulateMode) return replyToSend; else return;
+  }
+
+  // Path 2: Human Agent Escalation
+  if (isHumanAgentRequest(userMessageText)) {
+    replyToSend = `אני כאן כדי לעזור, אך כמובן שאפשר גם לדבר עם סוכן אנושי.\n${HUMAN_AGENT_CONTACT}`;
+    conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+    if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+      conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+    }
+    if (!simulateMode && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
+      await axios.post(
+        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+      );
+    } else if (!simulateMode) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (WhatsApp send skipped due to missing config)`);
+    }
+    if (simulateMode) return replyToSend; else return;
+  }
+
+  // Common: Add user message to conversation memory (after early exits)
+  conversationMemory[fromId].push({ role: "user", content: userMessageText });
+  if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+    conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+  }
+
+  // 0. Normalise user input
+  const clean = userMessageText.trim();
+
+  // Path 3: Primary RAG / Quote Intent Detection (if not already in questionnaire)
+  // 1. if user is NOT already in quote flow --> try FAQ RAG first
+  if (userSessionData[fromId].stage === undefined) { /* not in questionnaire */
+    // 1a. semantic RAG
+    let faqAnswer = await semanticLookup(clean);
+
+    // 1b. lexical fallback
+    if (!faqAnswer && stringSimilarity && insuranceKnowledgeBase.insurance_home_il_qa) {
+      const qs = insuranceKnowledgeBase.insurance_home_il_qa.map(r => r.question);
+      const { bestMatch } = stringSimilarity.findBestMatch(clean, qs);
+      if (bestMatch.rating >= 0.75) {
+        faqAnswer = insuranceKnowledgeBase.insurance_home_il_qa[bestMatch.bestMatchIndex].answer;
+      }
+    }
+
+    // 1c. if found – send / return it immediately
+    if (faqAnswer) {
+      replyToSend = faqAnswer;
+      conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+      if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+        conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+      }
+      if (simulateMode) return replyToSend;
+
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (from FAQ RAG)`);
+      if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+        await axios.post(
+          `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+          { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+          { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+        );
+      } else {
+        console.log("WhatsApp send skipped for FAQ RAG due to missing config");
+      }
+      return; // stop, don't start questionnaire
+    }
+
+    // 1d. if not FAQ but text shows quote intent → init questionnaire
+    if (isQuoteIntent(clean)) {
+      userSessionData[fromId].stage = 0; // start Q-flow
+      // Fall through to questionnaire logic below
+    }
+    // If no FAQ and no quote intent, and stage is still undefined,
+    // it will fall through to the OpenAI GPT call (Path 5, now Path 6).
+  }
+
+  // Path 4: Dynamic Questionnaire & Offer Recommendation (if in questionnaire flow)
+  if (userSessionData[fromId].stage !== undefined) {
+    // Try to extract answers from the current userMessageText
+    for (const field of NEEDS_FIELDS) {
+      if (!userSessionData[fromId][field.key]) {
+        const value = extractFieldValue(field.key, userMessageText); // Use original userMessageText
+        if (value) {
+          userSessionData[fromId][field.key] = value;
+          // If a value was extracted, we might have fulfilled the current question.
+          // The nextField check below will determine if we need to ask another or recommend.
+        }
+      }
+    }
+
+    const nextField = getNextMissingField(fromId);
+    if (nextField) {
+      replyToSend = nextField.question;
+      conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+      if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+        conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+      }
+      if (simulateMode) return replyToSend;
+      
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Questionnaire)`);
+      if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+        await axios.post(
+          `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+          { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+          { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+        );
+      } else {
+        console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Questionnaire - WhatsApp send skipped)`);
+      }
+      return; // Asked a question, stop processing
+    }
+
+    // If no nextField, all fields are filled. Proceed to recommendation.
+    const quote = calculateInsuranceQuote(userSessionData[fromId]);
+    const summary = buildRecommendationMessage(userSessionData[fromId], quote);
+    replyToSend = summary;
+    conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+    if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+      conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+    }
+    
+    // Consider resetting or managing stage: delete userSessionData[fromId].stage;
+    // For now, if recommendation is given, further messages from this user will restart FAQ RAG.
+
+    if (!simulateMode && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Recommendation)`);
+      await axios.post(
+        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+      );
+      const feedbackMsg = "אשמח לדעת מה דעתך על השירות שקיבלת מהבוט ועל ההמלצה לביטוח הדירה. האם יש משהו שנוכל לשפר?";
+      // Also add feedbackMsg to conversation memory if desired
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${feedbackMsg} (Feedback Request)`);
+      await axios.post(
+        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        { messaging_product: "whatsapp", to: fromId, text: { body: feedbackMsg } },
+        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+      );
+    } else if (!simulateMode) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Recommendation - WhatsApp send skipped)`);
+      if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+         console.log("Feedback message would also have been sent.");
+      }
+    }
+    if (simulateMode) return replyToSend; // Simulation only returns primary summary
+    else return; // Sent recommendation and feedback, stop processing
+  }
+  
+  // Path 5: REMOVED - Original RAG logic (semanticLookup, lexical fallback)
+  // This was:
+  // let kbAnswer = await semanticLookup(userMessageText);
+  // ... lexical fallback ...
+  // if (kbAnswer) { /* send and return */ }
+  // This is now handled by Path 3 if stage is undefined.
+
+  // Path 6: OpenAI GPT call (if no other path handled the message)
+  // This is reached if:
+  // - Not in questionnaire flow (stage is undefined) AND
+  // - FAQ RAG (Path 3a-3c) did NOT find an answer AND
+  // - Quote intent (Path 3d) was NOT detected.
+  try {
+    const openaiRes = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4o", // Ensure this model is appropriate and available
+        messages: conversationMemory[fromId], // Send full history including system prompt
+        max_tokens: 300,
+        temperature: 0.7,
+      },
+      { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" } }
+    );
+    const gptReplyContent = openaiRes.data.choices?.[0]?.message?.content?.trim();
+    if (gptReplyContent) {
+      replyToSend = gptReplyContent;
+      conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+      if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+        conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+      }
+    } else {
+      replyToSend = "מצטער, לא הצלחתי לעבד את בקשתך כרגע. נסה שוב מאוחר יותר."; // Default error
+       conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+       if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+        conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+      }
+    }
+  } catch (error) {
+    console.error("Error calling OpenAI:", error?.response?.data || error.message);
+    replyToSend = "אני מתנצל, נתקלתי בשגיאה בעת עיבוד בקשתך מול שירות הבינה המלאכותית. אנא נסה שוב בעוד מספר רגעים.";
+    // Log this error reply to conversation memory as well
+    conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+    if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+      conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+    }
+  }
+  
+  if (!simulateMode && replyToSend && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+    console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+      { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+    );
+  } else if (!simulateMode && replyToSend) {
+    console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (WhatsApp send skipped due to missing config)`);
+  }
+
+  // When called in "simulate" mode, just return the reply string
+  if (simulateMode) {
+    return replyToSend;
+  }
+  // If not in simulate mode, function has already sent the message or logged. No explicit return needed.
+}
+
 // =============================
 // 1. WhatsApp Webhook Verification (GET /webhook)
 // =============================
@@ -339,326 +592,55 @@ app.get("/webhook", (req, res) => {
 });
 
 // =============================
+// NEW: Local Web Chat Simulator Endpoint
+// =============================
+// demo endpoint: POST /simulate  { "text": "hello" }
+app.post("/simulate", async (req, res) => {
+  try {
+    const userText = req.body.text || "";
+    const demoPhone = "local-demo"; // constant fake sender
+    if (!userText) {
+      return res.status(400).json({ error: "text field is required" });
+    }
+    console.log(`[SIMULATE INCOMING] From: ${demoPhone} | Message: ${userText}`);
+    const reply = await processMessage(userText, demoPhone, true);
+    console.log(`[SIMULATE OUTGOING] To: ${demoPhone} | Reply: ${reply}`);
+    return res.json({ answer: reply });
+  } catch (err) {
+    console.error("Error in /simulate endpoint:", err?.message || err);
+    return res.status(500).json({ error: "internal error during simulation" });
+  }
+});
+
+// =============================
 // 2. WhatsApp Message Handler (POST /webhook)
 // =============================
 // Meta/Facebook will POST incoming WhatsApp messages to this endpoint.
-// This handler processes each message, sends it to OpenAI, and replies to the user.
 app.post("/webhook", async (req, res) => {
   try {
     const entry = req.body.entry?.[0];
     const changes = entry?.changes?.[0];
     const value = changes?.value;
     const messages = value?.messages;
+
     if (!messages || !Array.isArray(messages)) {
+      // Not an error, could be other webhook events. Respond 200 OK.
       return res.sendStatus(200);
     }
+
     for (const message of messages) {
       const from = message.from; // WhatsApp user phone number
-      const userMessage = message.text?.body; // Incoming text
-      if (!userMessage || !from) continue;
-      console.log(`[INCOMING] From: ${from} | Message: ${userMessage}`);
+      const userMessageContent = message.text?.body; // Incoming text
 
-      // =============================
-      // Data Privacy: Handle "forget me" requests
-      // =============================
-      /*
-      If the user requests to delete all their data, erase their session and chat history.
-      אם המשתמש מבקש "שכח אותי" או מחיקת מידע, כל המידע שלו יימחק.
-      */
-      if (isForgetMeRequest(userMessage)) {
-        delete conversationMemory[from];
-        delete userSessionData[from];
-        // Optionally, delete from persistent storage if implemented
-        const forgetMsg =
-          "כל המידע שלך נמחק מהמערכת בהתאם לבקשתך. אם תרצה להתחיל שיחה חדשה, אשמח לעזור!";
-        if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
-          await axios.post(
-            `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-            {
-              messaging_product: "whatsapp",
-              to: from,
-              text: { body: forgetMsg },
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
-                "Content-Type": "application/json",
-              },
-            },
-          );
-        } else {
-          console.log(
-            "WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.",
-          );
-        }
-        continue; // Skip further processing for this message
+      if (!userMessageContent || !from) {
+        // console.log("Skipping message without content or sender.");
+        continue;
       }
-
-      // =============================
-      // Human Agent Escalation: Detect and respond
-      // =============================
-      /*
-      If the user requests a human agent, provide contact details and skip further bot processing for this message.
-      אם המשתמש מבקש נציג אנושי, נשלח פרטי יצירת קשר ונדלג על המשך טיפול בוט.
-      */
-      if (isHumanAgentRequest(userMessage)) {
-        const escalationMsg = `אני כאן כדי לעזור, אך כמובן שאפשר גם לדבר עם סוכן אנושי.\n${HUMAN_AGENT_CONTACT}`;
-        conversationMemory[from].push({
-          role: "assistant",
-          content: escalationMsg,
-        });
-        if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-          conversationMemory[from] = conversationMemory[from].slice(
-            -MEMORY_LIMIT * 2,
-          );
-        }
-        if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
-          await axios.post(
-            `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-            {
-              messaging_product: "whatsapp",
-              to: from,
-              text: { body: escalationMsg },
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
-                "Content-Type": "application/json",
-              },
-            },
-          );
-        } else {
-          console.log(
-            "WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.",
-          );
-        }
-        continue; // Skip further processing for this message
-      }
-
-      // =============================
-      // Conversation Memory: Retrieve and update user history
-      // =============================
-      if (!conversationMemory[from]) {
-        conversationMemory[from] = [];
-      }
-      conversationMemory[from].push({ role: "user", content: userMessage });
-      if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-        conversationMemory[from] = conversationMemory[from].slice(
-          -MEMORY_LIMIT * 2,
-        );
-      }
-
-      // =============================
-      // Dynamic Questionnaire: Store answers and ask next relevant question
-      // =============================
-      /*
-      For each user, try to extract answers to needs fields from their message.
-      Store answers in userSessionData. If info is missing, ask only the next relevant question.
-      לכל משתמש ננסה לחלץ תשובות מההודעה לשדות הצרכים, ונשמור ב-userSessionData.
-      אם חסר מידע, נשאל רק את השאלה הבאה הרלוונטית.
-      */
-      if (!userSessionData[from]) userSessionData[from] = {};
-      for (const field of NEEDS_FIELDS) {
-        if (!userSessionData[from][field.key]) {
-          const value = extractFieldValue(field.key, userMessage);
-          if (value) {
-            userSessionData[from][field.key] = value;
-          }
-        }
-      }
-      const nextField = getNextMissingField(from);
-      if (nextField) {
-        // Ask only the next relevant question (in Hebrew, polite and professional)
-        const question = nextField.question;
-        conversationMemory[from].push({ role: "assistant", content: question });
-        if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-          conversationMemory[from] = conversationMemory[from].slice(
-            -MEMORY_LIMIT * 2,
-          );
-        }
-        // Send the question directly, skip GPT for this turn
-        if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
-          await axios.post(
-            `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-            {
-              messaging_product: "whatsapp",
-              to: from,
-              text: { body: question },
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
-                "Content-Type": "application/json",
-              },
-            },
-          );
-        } else {
-          console.log(
-            "WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.",
-          );
-        }
-        continue; // Skip to next message, don't call GPT until all info is collected
-      }
-
-      // =============================
-      // Offer Recommendation: After all info is collected
-      // =============================
-      /*
-      Once all required info is collected, recommend a suitable coverage and quote.
-      לאחר איסוף כל הפרטים, הבוט ממליץ על כיסוי מתאים ומחיר משוער.
-      */
-      const allFieldsFilled = NEEDS_FIELDS.every(
-        (f) => userSessionData[from][f.key],
-      );
-      if (allFieldsFilled) {
-        const quote = calculateInsuranceQuote(userSessionData[from]);
-        const summary = buildRecommendationMessage(
-          userSessionData[from],
-          quote,
-        );
-        conversationMemory[from].push({ role: "assistant", content: summary });
-        if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-          conversationMemory[from] = conversationMemory[from].slice(
-            -MEMORY_LIMIT * 2,
-          );
-        }
-        if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
-          await axios.post(
-            `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-            {
-              messaging_product: "whatsapp",
-              to: from,
-              text: { body: summary },
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
-                "Content-Type": "application/json",
-              },
-            },
-          );
-          // =============================
-          // Feedback Request: After recommendation
-          // =============================
-          /*
-          After sending the recommendation, ask the user for feedback about the bot and the insurance advice.
-          לאחר שליחת ההמלצה, נבקש מהמשתמש משוב על השירות.
-          */
-          const feedbackMsg =
-            "אשמח לדעת מה דעתך על השירות שקיבלת מהבוט ועל ההמלצה לביטוח הדירה. האם יש משהו שנוכל לשפר?";
-          await axios.post(
-            `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-            {
-              messaging_product: "whatsapp",
-              to: from,
-              text: { body: feedbackMsg },
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
-                "Content-Type": "application/json",
-              },
-            },
-          );
-        } else {
-          console.log(
-            "WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.",
-          );
-        }
-        continue; // Skip GPT for this turn, as the recommendation is sent directly
-      }
-
-      // =============================
-      // RAG: Check knowledge base before GPT
-      // =============================
-      /*
-      Retrieval-Augmented Generation (RAG) Flow:
-      ------------------------------------------
-      1. When a user message arrives, the bot first checks the structured knowledge base (insurance_knowledge.json) for a close match using semantic search.
-      2. If a relevant answer is found, the bot:
-         - Sends the answer directly to the user (in clear, professional Hebrew, as required by SYSTEM_PROMPT),
-         - Appends a short reference: '(מתוך מאגר הידע הרשמי)' to indicate the answer is from the official knowledge base,
-         - Logs the Q&A to the user's conversation memory for context,
-         - Skips the GPT call for this turn.
-      3. If no match is found, the bot tries a lexical (fuzzy) fallback.
-      4. If still no answer, the bot proceeds as usual to GPT, maintaining all conversation memory and features.
-      */
-      const cleanUserText = userMessage;
-      const similarity = stringSimilarity;
-      const fromPhone = from;
-
-      // 1. Semantic RAG (vector)
-      let kbAnswer = await semanticLookup(cleanUserText);
-
-      // 2. Fallback lexical similarity
-      if (!kbAnswer && similarity && insuranceKnowledgeBase.insurance_home_il_qa) {
-        const qs = insuranceKnowledgeBase.insurance_home_il_qa.map(r => r.question);
-        const { bestMatch } = similarity.findBestMatch(cleanUserText, qs);
-        if (bestMatch.rating >= 0.75) {
-          kbAnswer = insuranceKnowledgeBase.insurance_home_il_qa[bestMatch.bestMatchIndex].answer;
-        }
-      }
-
-      // 3. Respond from KB or ask OpenAI
-      if (kbAnswer) {
-        await sendWhatsAppReply(kbAnswer, fromPhone);
-        return;          // OpenAI not needed
-      }
-
-      // =============================
-      // 3. Send user message and history to OpenAI GPT-4/4o
-      // =============================
-      const openaiRes = await axios.post(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          model: "gpt-4o",
-          messages: conversationMemory[from],
-          max_tokens: 300,
-          temperature: 0.7,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-        },
-      );
-      const gptReply = openaiRes.data.choices?.[0]?.message?.content?.trim();
-      console.log(`[OUTGOING] To: ${from} | Message: ${gptReply}`);
-
-      conversationMemory[from].push({ role: "assistant", content: gptReply });
-      if (conversationMemory[from].length > MEMORY_LIMIT * 2) {
-        conversationMemory[from] = conversationMemory[from].slice(
-          -MEMORY_LIMIT * 2,
-        );
-      }
-
-      // =============================
-      // 4. Send reply to WhatsApp user
-      // =============================
-      // This uses the WhatsApp Cloud API. You must have a WhatsApp Business Phone Number ID and API token.
-      // Configure these in your Meta for Developers dashboard.
-      // If you want to send messages outside the 24-hour window, you must use a pre-approved message template (see Meta docs).
-      if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
-        await axios.post(
-          `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-          {
-            messaging_product: "whatsapp",
-            to: from,
-            text: { body: gptReply },
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
-              "Content-Type": "application/json",
-            },
-          },
-        );
-      } else {
-        console.log(
-          "WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID not set. Skipping WhatsApp reply.",
-        );
-      }
+      console.log(`[INCOMING] From: ${from} | Message: ${userMessageContent}`);
+      
+      // Call the refactored processing logic
+      // The processMessage function now handles sending the reply or returning it for simulation
+      await processMessage(userMessageContent, from, false); 
     }
     res.sendStatus(200);
   } catch (error) {
@@ -666,7 +648,7 @@ app.post("/webhook", async (req, res) => {
       "Error handling webhook:",
       error?.response?.data || error.message,
     );
-    res.sendStatus(500);
+    res.sendStatus(500); // Send 500 for unhandled errors in the webhook processor
   }
 });
 

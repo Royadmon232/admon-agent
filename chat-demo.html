@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Doni – Local Chat Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 420px; margin: 40px auto; }
+    #log { border: 1px solid #ccc; padding: 10px; height: 400px; overflow-y: auto; }
+    .me   { text-align: right; color: #0070ff; }
+    .doni { text-align: left;  color: #111;    }
+  </style>
+</head>
+<body>
+  <h3>Local WhatsApp-style Demo</h3>
+  <div id="log"></div>
+  <form id="f">
+    <input id="msg" placeholder="Type your message…" autofocus style="width:80%" />
+    <button>Send</button>
+  </form>
+
+<script>
+const log = document.getElementById("log");
+document.getElementById("f").addEventListener("submit", async e => {
+  e.preventDefault();
+  const txt = msg.value.trim();
+  if (!txt) return;
+  append("me", txt);
+  msg.value = "";
+  const r = await fetch("/simulate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: txt })
+  }).then(r => r.json());
+  append("doni", r.answer || "[error]");
+});
+
+function append(cls, t) {
+  const p = document.createElement("p");
+  p.className = cls;
+  p.textContent = t;
+  log.appendChild(p);
+  log.scrollTop = log.scrollHeight;
+}
+</script>
+</body>
+</html> 
