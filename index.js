@@ -31,6 +31,10 @@ import { semanticLookup } from './agentController.js';
 
 dotenv.config();
 
+if (!process.env.OPENAI_API_KEY) {
+  console.warn('⚠️  OPENAI_API_KEY missing – running in knowledge-only mode');
+}
+
 const app = express();
 app.use(express.static('public'));
 
@@ -594,31 +598,35 @@ app.get("/webhook", (req, res) => {
 });
 
 // =============================
-// NEW: Local Web Chat Simulator Endpoint
+// Local Web Chat Simulator Endpoint
 // =============================
-// demo endpoint: POST /simulate  { "text": "hello" }
-app.post("/simulate", async (req, res) => {
+// Helper function for lexical matching
+async function lexicalLookup(text) {
+  if (!stringSimilarity || !insuranceKnowledgeBase.insurance_home_il_qa) return null;
+  
   try {
-    const userText = req.body.text || "";
-    const demoPhone = "local-demo"; // constant fake sender
-    
-    if (!userText) {
-      return res.status(400).json({ 
-        error: "text field is required",
-        answer: "אנא הכנס טקסט להודעה שלך."
-      });
+    const qs = insuranceKnowledgeBase.insurance_home_il_qa.map(r => r.question);
+    const { bestMatch } = stringSimilarity.findBestMatch(text, qs);
+    if (bestMatch.rating >= 0.75) {
+      return insuranceKnowledgeBase.insurance_home_il_qa[bestMatch.bestMatchIndex].answer;
     }
+  } catch (e) {
+    console.error('Lexical lookup failed:', e.message);
+  }
+  return null;
+}
 
-    console.log(`[SIMULATE INCOMING] From: ${demoPhone} | Message: ${userText}`);
-    const reply = await processMessage(userText, demoPhone, true);
-    console.log(`[SIMULATE OUTGOING] To: ${demoPhone} | Reply: ${reply}`);
-    
-    return res.json({ answer: reply || "מצטער, לא הצלחתי לעבד את ההודעה שלך כרגע. נסה שוב מאוחר יותר." });
-  } catch (err) {
-    console.error("Error in /simulate endpoint:", err?.message || err);
-    return res.json({ 
-      answer: "מצטער, נתקלתי בשגיאה בעיבוד ההודעה שלך. נסה שוב בעוד מספר רגעים."
-    });
+app.post('/simulate', async (req, res) => {
+  try {
+    const text = req.body?.text?.trim();
+    if (!text) return res.status(400).json({ error: 'empty_message' });
+
+    let answer = await semanticLookup(text);
+    if (!answer) answer = lexicalLookup(text);           // existing fallback
+    res.json({ answer });
+  } catch (e) {
+    console.error('Unhandled /simulate error:', e);
+    res.json({ answer: 'אירעה שגיאה פנימית, נסה שוב בעוד רגע.' });
   }
 });
 
