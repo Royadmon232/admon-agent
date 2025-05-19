@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import axios from 'axios';
 import { cosine } from './utils.js';
+import stringSimilarity from 'string-similarity';
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.83;
