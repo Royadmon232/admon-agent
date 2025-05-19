@@ -32,32 +32,45 @@ try {
   const knowledgePath = new URL('./insurance_knowledge.json', import.meta.url);
   const rawData = await fs.readFile(knowledgePath, 'utf8');
   const insuranceKnowledgeBase = JSON.parse(rawData);
-  KNOWLEDGE = insuranceKnowledgeBase.insurance_home_il_qa
-    .map((r) => ({ q: r.question, a: r.answer }));
+  KNOWLEDGE = insuranceKnowledgeBase.insurance_home_il_qa;
   console.log(`✅ Loaded ${KNOWLEDGE.length} knowledge base entries`);
 } catch (e) {
   console.error('⚠️  Failed to load knowledge base:', e.message);
   KNOWLEDGE = [];
 }
 
-// Simple keyword-based lookup
+// GPT-4o based semantic question answering
 export async function semanticLookup(userMsg) {
-  userMsg = normalize(userMsg);
-  if (KNOWLEDGE.length === 0) return null;
+  if (!process.env.OPENAI_API_KEY || KNOWLEDGE.length === 0) return null;
 
-  // Simple keyword matching
-  const keywords = userMsg.split(/\s+/);
-  const matches = KNOWLEDGE.filter(entry => {
-    const normalizedQ = normalize(entry.q);
-    return keywords.some(keyword => normalizedQ.includes(keyword));
-  });
+  const systemPrompt = `אתה סוכן ביטוח דירות מקצועי. תפקידך לענות על שאלות בנושא ביטוח דירה.
+  
+יש לך גישה לרשימת שאלות ותשובות שכיחות. עליך:
+1. לנסות למצוא את התשובה המתאימה ביותר מהרשימה, לפי משמעות השאלה (לא לפי מילים זהות).
+2. אם אין תשובה מתאימה ברשימה, עליך לענות בעצמך בצורה מקצועית ועניינית.
 
-  if (matches.length > 0) {
-    // Return the first match for now
-    return matches[0].a;
+הנה רשימת השאלות והתשובות:
+${KNOWLEDGE.map(qa => `שאלה: ${qa.question}\nתשובה: ${qa.answer}\n`).join('\n')}`;
+
+  try {
+    const { data } = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4o",
+        temperature: 0.7,
+        max_tokens: 500,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMsg }
+        ]
+      },
+      { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
+    );
+    return data.choices?.[0]?.message?.content?.trim() || null;
+  } catch (e) {
+    console.error("GPT semantic lookup error:", e?.response?.data || e.message);
+    return null;
   }
-
-  return null;
 }
 
 // Export the normalize function
