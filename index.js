@@ -1,15 +1,15 @@
 /*
 ============================
-WhatsApp Home Insurance Bot (Node.js, OpenAI GPT)
+WhatsApp Home Insurance Bot (Node.js)
 ============================
 
-This file implements a WhatsApp Business bot for home insurance in Hebrew, using Node.js and OpenAI GPT-4/4o.
+This file implements a WhatsApp Business bot for home insurance in Hebrew, using Node.js.
 
 Step-by-step process:
 1. Loads environment variables from .env (never hardcoded secrets).
 2. Sets up an Express server to handle WhatsApp webhook verification and incoming messages.
 3. Verifies the webhook with Meta/Facebook (GET /webhook).
-4. Receives WhatsApp messages (POST /webhook), sends them to OpenAI, and replies to the sender.
+4. Receives WhatsApp messages (POST /webhook), processes them through agentController.js, and replies to the sender.
 5. All incoming and outgoing messages are printed to the console for debugging.
 
 Meta/Facebook/WhatsApp setup required:
@@ -21,10 +21,12 @@ Meta/Facebook/WhatsApp setup required:
 */
 
 import express from "express";
+import axios from "axios";
 import cors from "cors";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
-import { semanticLookup } from './agentController.js';
+import fs from "fs";
+import { semanticLookup, normalize } from './agentController.js';
 
 dotenv.config();
 
@@ -39,10 +41,25 @@ const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 
 // =============================
+// SYSTEM_PROMPT: Simulate a Real Insurance Agent (Advanced)
+// =============================
+const SYSTEM_PROMPT = `אתה סוכן ביטוח דירות מקצועי ומנוסה.\nענה תמיד בעברית תקינה, בגובה העיניים, ותן שירות אישי ואמפתי.\nשאל שאלות רלוונטיות (כתובת, שטח, תכולה, אמצעי מיגון), הסבר הבדלים בין סוגי כיסויים, ופשט מידע בצורה מובנת ללקוח.\nאם יש התלבטות, תרגיע ותסביר בביטחון.\nאם אין לך תשובה – אמור שתבדוק ותחזור.\nהימנע לחלוטין מתשובות רובוטיות או כלליות.`;
+
+// =============================
 // Conversation Memory (Contextual Chat)
 // =============================
 const conversationMemory = {};
 const MEMORY_LIMIT = 10; // Number of message pairs to keep per user
+
+// =============================
+// Home Insurance Knowledge Base (RAG)
+// =============================
+const insuranceKnowledgeBase = JSON.parse(
+  fs.readFileSync("./insurance_knowledge.json", "utf8"),
+);
+const KNOWLEDGE = insuranceKnowledgeBase.insurance_home_il_qa
+  .filter((r) => Array.isArray(r.embedding))
+  .map((r) => ({ q: r.question, a: r.answer, v: r.embedding }));
 
 // =============================
 // Dynamic Questionnaire & Needs Analysis
@@ -150,87 +167,328 @@ function buildRecommendationMessage(session, quote) {
 }
 
 // =============================
-// WhatsApp Webhook Handlers
+// Human Agent Escalation & Feedback
+// =============================
+const HUMAN_AGENT_KEYWORDS = [
+  "נציג אנושי",
+  "נציג",
+  "סוכן אנושי",
+  "סוכן",
+  "אני רוצה לדבר עם נציג",
+  "אני צריך עזרה נוספת",
+  "I want to speak with a human",
+  "human agent",
+  "representative",
+  "need further help",
+  "talk to a person",
+];
+
+const HUMAN_AGENT_CONTACT =
+  "תוכל ליצור קשר עם סוכן אנושי בטלפון: 03-1234567 או במייל: agent@example.com";
+
+function isHumanAgentRequest(message) {
+  const normalized = message.toLowerCase();
+  return HUMAN_AGENT_KEYWORDS.some((keyword) =>
+    normalized.includes(keyword.toLowerCase()),
+  );
+}
+
+// =============================
+// Session and Data Privacy
+// =============================
+const FORGET_ME_KEYWORDS = [
+  "שכח אותי",
+  "מחק את כל המידע",
+  "delete my data",
+  "forget me",
+  "erase my data",
+  "מחק אותי",
+];
+
+function isForgetMeRequest(message) {
+  const normalized = message.toLowerCase();
+  return FORGET_ME_KEYWORDS.some((keyword) =>
+    normalized.includes(keyword.toLowerCase()),
+  );
+}
+
+const QUOTE_TRIGGERS = [
+  "הצעת מחיר", "כמה עולה", "ביטוח דירה", "מבקש הצעת", "offer", "quote"
+];
+
+function isQuoteIntent(text) {
+  const lowerText = text.toLowerCase();
+  return QUOTE_TRIGGERS.some(t => lowerText.includes(t.toLowerCase()));
+}
+
+// =============================
+// Core Message Processing Logic
+// =============================
+async function processMessage(userMessageText, fromId, simulateMode = false) {
+  let replyToSend = "";
+
+  // Ensure conversationMemory and userSessionData for 'fromId' exist
+  if (!conversationMemory[fromId]) {
+    conversationMemory[fromId] = [{ role: "system", content: SYSTEM_PROMPT }];
+  }
+  if (!userSessionData[fromId]) {
+    userSessionData[fromId] = {};
+  }
+
+  // Path 1: Data Privacy - Handle "forget me" requests
+  if (isForgetMeRequest(userMessageText)) {
+    delete conversationMemory[fromId];
+    delete userSessionData[fromId];
+    replyToSend = "כל המידע שלך נמחק מהמערכת בהתאם לבקשתך. אם תרצה להתחיל שיחה חדשה, אשמח לעזור!";
+    if (!simulateMode && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
+      await axios.post(
+        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+      );
+    } else if (!simulateMode) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (WhatsApp send skipped due to missing config)`);
+    }
+    if (simulateMode) return replyToSend; else return;
+  }
+
+  // Path 2: Human Agent Escalation
+  if (isHumanAgentRequest(userMessageText)) {
+    replyToSend = `אני כאן כדי לעזור, אך כמובן שאפשר גם לדבר עם סוכן אנושי.\n${HUMAN_AGENT_CONTACT}`;
+    conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+    if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+      conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+    }
+    if (!simulateMode && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
+      await axios.post(
+        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+      );
+    } else if (!simulateMode) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (WhatsApp send skipped due to missing config)`);
+    }
+    if (simulateMode) return replyToSend; else return;
+  }
+
+  // Common: Add user message to conversation memory
+  conversationMemory[fromId].push({ role: "user", content: userMessageText });
+  if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+    conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+  }
+
+  // 0. Normalise user input
+  const clean = userMessageText.trim();
+
+  // Path 3: Primary RAG / Quote Intent Detection
+  if (userSessionData[fromId].stage === undefined) {
+    // Try FAQ RAG first
+    let faqAnswer = await semanticLookup(clean);
+
+    if (faqAnswer) {
+      replyToSend = faqAnswer;
+      conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+      if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+        conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+      }
+      if (simulateMode) return replyToSend;
+
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (from FAQ)`);
+      if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+        await axios.post(
+          `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+          { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+          { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+        );
+      } else {
+        console.log("WhatsApp send skipped for FAQ due to missing config");
+      }
+      return;
+    }
+
+    // If not FAQ but text shows quote intent → init questionnaire
+    if (isQuoteIntent(clean)) {
+      userSessionData[fromId].stage = 0;
+    }
+  }
+
+  // Path 4: Dynamic Questionnaire & Offer Recommendation
+  if (userSessionData[fromId].stage !== undefined) {
+    // Try to extract answers from the current userMessageText
+    for (const field of NEEDS_FIELDS) {
+      if (!userSessionData[fromId][field.key]) {
+        const value = extractFieldValue(field.key, userMessageText);
+        if (value) {
+          userSessionData[fromId][field.key] = value;
+        }
+      }
+    }
+
+    const nextField = getNextMissingField(fromId);
+    if (nextField) {
+      replyToSend = nextField.question;
+      conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+      if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+        conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+      }
+      if (simulateMode) return replyToSend;
+      
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Questionnaire)`);
+      if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+        await axios.post(
+          `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+          { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+          { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+        );
+      } else {
+        console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Questionnaire - WhatsApp send skipped)`);
+      }
+      return;
+    }
+
+    // If no nextField, all fields are filled. Proceed to recommendation.
+    const quote = calculateInsuranceQuote(userSessionData[fromId]);
+    const summary = buildRecommendationMessage(userSessionData[fromId], quote);
+    replyToSend = summary;
+    conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+    if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+      conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+    }
+    
+    if (!simulateMode && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Recommendation)`);
+      await axios.post(
+        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+      );
+      const feedbackMsg = "אשמח לדעת מה דעתך על השירות שקיבלת מהבוט ועל ההמלצה לביטוח הדירה. האם יש משהו שנוכל לשפר?";
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${feedbackMsg} (Feedback Request)`);
+      await axios.post(
+        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+        { messaging_product: "whatsapp", to: fromId, text: { body: feedbackMsg } },
+        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+      );
+    } else if (!simulateMode) {
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Recommendation - WhatsApp send skipped)`);
+      if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+         console.log("Feedback message would also have been sent.");
+      }
+    }
+    if (simulateMode) return replyToSend;
+    else return;
+  }
+  
+  // If no other path handled the message, use semantic lookup
+  replyToSend = await semanticLookup(clean);
+  if (!replyToSend) {
+    replyToSend = "מצטער, לא הצלחתי לעבד את בקשתך כרגע. נסה שוב מאוחר יותר.";
+  }
+  
+  conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+  if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+    conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+  }
+  
+  if (!simulateMode && replyToSend && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+    console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
+      { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
+    );
+  } else if (!simulateMode && replyToSend) {
+    console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (WhatsApp send skipped due to missing config)`);
+  }
+
+  if (simulateMode) {
+    return replyToSend;
+  }
+}
+
+// =============================
+// 1. WhatsApp Webhook Verification (GET /webhook)
 // =============================
 app.get("/webhook", (req, res) => {
+  const verify_token = WHATSAPP_VERIFY_TOKEN;
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
   if (mode && token) {
-    if (mode === "subscribe" && token === WHATSAPP_VERIFY_TOKEN) {
-      console.log("✅ Webhook verified");
+    if (mode === "subscribe" && token === verify_token) {
+      console.log("WEBHOOK_VERIFIED");
       res.status(200).send(challenge);
     } else {
       res.sendStatus(403);
     }
+  } else {
+    res.sendStatus(400);
   }
 });
 
+// =============================
+// Local Web Chat Simulator Endpoint
+// =============================
+app.post('/simulate', async (req, res) => {
+  try {
+    const text = normalize(req.body?.text);
+    if (!text) return res.status(400).json({ answer: 'הודעה ריקה התקבלה.' });
+
+    const answer = await semanticLookup(text);
+    
+    if (answer) {
+      res.json({ answer: answer });
+    } else {
+      res.json({ answer: 'מצטער, לא מצאתי תשובה כרגע.' });
+    }
+  } catch (e) {
+    console.error('Unhandled /simulate error:', e);
+    res.status(500).json({ answer: 'אירעה שגיאה פנימית בעיבוד הבקשה. אנא נסה שוב בעוד מספר רגעים.' });
+  }
+});
+
+// =============================
+// 2. WhatsApp Message Handler (POST /webhook)
+// =============================
 app.post("/webhook", async (req, res) => {
   try {
-    const { body } = req;
+    const entry = req.body.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const value = changes?.value;
+    const messages = value?.messages;
 
-    if (body.object) {
-      if (
-        body.entry &&
-        body.entry[0].changes &&
-        body.entry[0].changes[0] &&
-        body.entry[0].changes[0].value.messages &&
-        body.entry[0].changes[0].value.messages[0]
-      ) {
-        const phone_number_id =
-          body.entry[0].changes[0].value.metadata.phone_number_id;
-        const from = body.entry[0].changes[0].value.messages[0].from;
-        const msg_body = body.entry[0].changes[0].value.messages[0].text.body;
-
-        console.log("📱 Incoming message:", msg_body);
-
-        // Get AI response
-        const aiResponse = await semanticLookup(msg_body);
-        if (!aiResponse) {
-          console.error("❌ No AI response");
-          return res.sendStatus(500);
-        }
-
-        // Send response back to WhatsApp
-        const response = await fetch(
-          `https://graph.facebook.com/v17.0/${phone_number_id}/messages`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${WHATSAPP_API_TOKEN}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              to: from,
-              text: { body: aiResponse },
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          console.error("❌ WhatsApp API error:", await response.text());
-          return res.sendStatus(500);
-        }
-
-        console.log("✅ Response sent:", aiResponse);
-        res.sendStatus(200);
-      } else {
-        res.sendStatus(404);
-      }
-    } else {
-      res.sendStatus(404);
+    if (!messages || !Array.isArray(messages)) {
+      return res.sendStatus(200);
     }
+
+    for (const message of messages) {
+      const from = message.from;
+      const userMessageContent = message.text?.body;
+
+      if (!userMessageContent || !from) {
+        continue;
+      }
+      console.log(`[INCOMING] From: ${from} | Message: ${userMessageContent}`);
+      
+      await processMessage(userMessageContent, from, false);
+    }
+    res.sendStatus(200);
   } catch (error) {
-    console.error("❌ Webhook error:", error);
+    console.error(
+      "Error handling webhook:",
+      error?.response?.data || error.message,
+    );
     res.sendStatus(500);
   }
 });
 
-// Start server
+// =============================
+// 5. Start the Express server
+// =============================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });

@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import axios from 'axios';
-import unorm from 'unorm';
+import pkg from 'unorm';
+const { normalize: unormNormalize } = pkg;
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.78;
@@ -17,7 +18,7 @@ const hebEndings = { ך:'כ', ם:'מ', ן:'נ', ף:'פ', ץ:'צ' };
  *  • lower-cases
  */
 function normalize(t = "") {
-  return unorm.nfd(t)
+  return unormNormalize(t)
     .replace(/[.,!?;:()״""\-'"`]/g, " ")
     .replace(/[ךםןףץ]/g, c => hebEndings[c])
     .replace(/\s+/g, " ")
@@ -40,7 +41,15 @@ try {
 
 // GPT-4o based semantic question answering
 export async function semanticLookup(userMsg) {
-  if (!process.env.OPENAI_API_KEY || KNOWLEDGE.length === 0) return null;
+  if (!process.env.OPENAI_API_KEY) {
+    console.error("❌ OpenAI API key not found in environment variables");
+    return "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
+  }
+
+  if (KNOWLEDGE.length === 0) {
+    console.error("❌ Knowledge base is empty");
+    return "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
+  }
 
   const systemPrompt = `אתה סוכן ביטוח דירות מקצועי ואדיב. תפקידך לענות על שאלות בנושא ביטוח דירה בצורה מקצועית, ידידותית ומקיפה.
 
@@ -84,7 +93,7 @@ ${KNOWLEDGE.map(qa => `שאלה: ${qa.question}\nתשובה: ${qa.answer}\n`).jo
     return answer;
   } catch (error) {
     console.error("Error calling GPT-4o:", error.response?.data || error.message);
-    return null;
+    return "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
   }
 }
 
