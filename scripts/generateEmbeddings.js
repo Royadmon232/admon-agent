@@ -12,6 +12,7 @@ import fs from "fs";
 import axios from "axios";
 import dotenv from "dotenv";
 import path from "path";
+import { fileURLToPath } from 'url';
 
 // Debug: Print current working directory
 console.log('Current working directory:', process.cwd());
@@ -31,7 +32,11 @@ if (!process.env.OPENAI_API_KEY) {
   process.exit(1);
 }
 
-const KB_PATH = "./insurance_knowledge.json";
+const KB_PATH = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'insurance_knowledge.json'
+);
 const PRIMARY_MODEL = "text-embedding-3-small";
 const FALLBACK_MODEL = "text-embedding-ada-002";
 
@@ -53,7 +58,18 @@ const getEmbedding = async (text, model) => {
 };
 
 const kbObj = JSON.parse(fs.readFileSync(KB_PATH, "utf8"));
-for (const row of kbObj.insurance_home_il_qa) {
+const records = Array.isArray(kbObj)
+  ? kbObj
+  : kbObj.insurance_home_il_qa || [];
+
+console.log('📊  records found:', records.length);
+if (records.length === 0) {
+  console.error('❌ No Q&A items found – check JSON structure');
+  process.exit(1);
+}
+
+for (const row of records) {
+  console.log('🔄  Embedding:', row.question.substring(0, 60), '...');
   if (!Array.isArray(row.embedding)) {
     try {
       row.embedding = await getEmbedding(row.question, PRIMARY_MODEL);
