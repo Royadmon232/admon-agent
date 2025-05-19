@@ -619,14 +619,25 @@ async function lexicalLookup(text) {
 app.post('/simulate', async (req, res) => {
   try {
     const text = req.body?.text?.trim();
-    if (!text) return res.status(400).json({ error: 'empty_message' });
+    if (!text) return res.status(400).send('empty_message'); // Send string
 
     let answer = await semanticLookup(text);
-    if (!answer) answer = lexicalLookup(text);           // existing fallback
-    res.json({ answer });
+    if (!answer) {
+      // Ensure lexicalLookup is the one defined in this file, or ensure agentController.lexicalFallback is used if intended
+      // Assuming lexicalLookup is the local one based on context:
+      answer = await lexicalLookup(text); 
+    }
+
+    if (answer) {
+      res.send(answer); // Send the answer string directly
+    } else {
+      // Send a user-friendly message if no answer is found.
+      res.send('לא מצאתי תשובה מתאימה לשאלתך. נסה לנסח מחדש או לשאול שאלה אחרת.'); 
+    }
   } catch (e) {
     console.error('Unhandled /simulate error:', e);
-    res.json({ answer: 'אירעה שגיאה פנימית, נסה שוב בעוד רגע.' });
+    // Send a user-friendly error message as a string.
+    res.status(500).send('אירעה שגיאה פנימית בעיבוד הבקשה. אנא נסה שוב בעוד מספר רגעים.');
   }
 });
 
