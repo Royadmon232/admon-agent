@@ -4,6 +4,8 @@ import { cosine } from './index.js';
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.83;
+const PRIMARY_MODEL = 'text-embedding-3-small';
+const FALLBACK_MODEL = 'text-embedding-ada-002';
 
 // Load knowledge base once at startup
 let KNOWLEDGE = [];
@@ -37,36 +39,45 @@ async function lexicalFallback(userMsg, stringSimilarity) {
 }
 
 // Main semantic lookup with fallbacks
-export async function semanticLookup(userMsg, stringSimilarity) {
-  // Skip API call if knowledge base is empty
-  if (!KNOWLEDGE.length) {
-    console.log('ℹ️  Knowledge base is empty, skipping semantic lookup');
-    return null;
-  }
+export async function semanticLookup(userMsg) {
+  if (KNOWLEDGE.length === 0) return null;  // skip if no vectors
 
-  try {
-    // Try semantic search first
+  const getEmbedding = async (model) => {
     const { data } = await axios.post(
-      "https://api.openai.com/v1/embeddings",
-      { model: EMB_MODEL, input: userMsg },
+      'https://api.openai.com/v1/embeddings',
+      { model, input: userMsg },
       { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
     );
-    
-    const u = data.data[0].embedding;
-    let best = { score: 0, answer: null };
-    
-    for (const row of KNOWLEDGE) {
-      const score = cosine(u, row.v);
-      if (score > best.score) best = { score, answer: row.a };
-    }
-    
-    if (best.score >= SEMANTIC_THRESHOLD) {
-      return best.answer;
-    }
+    return data.data[0].embedding;
+  };
+
+  let u;
+  try {
+    u = await getEmbedding(PRIMARY_MODEL);
   } catch (e) {
-    console.error('⚠️  Semantic lookup failed:', e.message);
-    // Fall back to lexical matching
-    return await lexicalFallback(userMsg, stringSimilarity);
+    if (e.response?.data?.error?.code === 'model_not_found') {
+      console.warn('PRIMARY_MODEL unavailable → using FALLBACK_MODEL');
+      try { 
+        u = await getEmbedding(FALLBACK_MODEL); 
+      } catch (e) { 
+        console.error('Fallback failed:', e.message); 
+        return null; 
+      }
+    } else {
+      console.error('Embed error:', e.message);
+      return null;
+    }
+  }
+
+  let best = { score: 0, answer: null };
+  
+  for (const row of KNOWLEDGE) {
+    const score = cosine(u, row.v);
+    if (score > best.score) best = { score, answer: row.a };
+  }
+  
+  if (best.score >= SEMANTIC_THRESHOLD) {
+    return best.answer;
   }
 
   // If semantic search didn't find a good match, try lexical
