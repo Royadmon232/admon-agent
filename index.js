@@ -25,7 +25,6 @@ import axios from "axios";
 import cors from "cors";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
-import stringSimilarity from "string-similarity";
 import fs from "fs";
 import { semanticLookup, normalize } from './agentController.js';
 import { askGPT } from './gptHelper.js';
@@ -394,17 +393,8 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
   // Path 3: Primary RAG / Quote Intent Detection (if not already in questionnaire)
   // 1. if user is NOT already in quote flow --> try FAQ RAG first
   if (userSessionData[fromId].stage === undefined) { /* not in questionnaire */
-    // 1a. semantic RAG
+    // 1a. simple keyword matching
     let faqAnswer = await semanticLookup(clean);
-
-    // 1b. lexical fallback
-    if (!faqAnswer && stringSimilarity && insuranceKnowledgeBase.insurance_home_il_qa) {
-      const qs = insuranceKnowledgeBase.insurance_home_il_qa.map(r => r.question);
-      const { bestMatch } = stringSimilarity.findBestMatch(clean, qs);
-      if (bestMatch.rating >= 0.75) {
-        faqAnswer = insuranceKnowledgeBase.insurance_home_il_qa[bestMatch.bestMatchIndex].answer;
-      }
-    }
 
     // 1c. if found – send / return it immediately
     if (faqAnswer) {
@@ -415,7 +405,7 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
       }
       if (simulateMode) return replyToSend;
 
-      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (from FAQ RAG)`);
+      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (from FAQ)`);
       if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
         await axios.post(
           `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
@@ -423,7 +413,7 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
           { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
         );
       } else {
-        console.log("WhatsApp send skipped for FAQ RAG due to missing config");
+        console.log("WhatsApp send skipped for FAQ due to missing config");
       }
       return; // stop, don't start questionnaire
     }
@@ -434,7 +424,7 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
       // Fall through to questionnaire logic below
     }
     // If no FAQ and no quote intent, and stage is still undefined,
-    // it will fall through to the OpenAI GPT call (Path 5, now Path 6).
+    // it will fall through to the OpenAI GPT call (Path 6).
   }
 
   // Path 4: Dynamic Questionnaire & Offer Recommendation (if in questionnaire flow)
@@ -510,13 +500,6 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
     else return; // Sent recommendation and feedback, stop processing
   }
   
-  // Path 5: REMOVED - Original RAG logic (semanticLookup, lexical fallback)
-  // This was:
-  // let kbAnswer = await semanticLookup(userMessageText);
-  // ... lexical fallback ...
-  // if (kbAnswer) { /* send and return */ }
-  // This is now handled by Path 3 if stage is undefined.
-
   // Path 6: OpenAI GPT call (if no other path handled the message)
   // This is reached if:
   // - Not in questionnaire flow (stage is undefined) AND
