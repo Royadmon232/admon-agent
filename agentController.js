@@ -61,22 +61,30 @@ export async function semanticLookup(userMsg) {
 ${KNOWLEDGE.map(qa => `שאלה: ${qa.question}\nתשובה: ${qa.answer}\n`).join('\n')}`;
 
   try {
-    const { data } = await axios.post(
+    const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
         model: "gpt-4o",
-        temperature: 0.7,
-        max_tokens: 500,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userMsg }
-        ]
+        ],
+        temperature: 0.7,
+        max_tokens: 500
       },
-      { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } }
+      {
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
     );
-    return data.choices?.[0]?.message?.content?.trim() || null;
-  } catch (e) {
-    console.error("GPT semantic lookup error:", e?.response?.data || e.message);
+
+    const answer = response.data.choices[0].message.content.trim();
+    console.log("GPT-4o response:", answer);
+    return answer;
+  } catch (error) {
+    console.error("Error calling GPT-4o:", error.response?.data || error.message);
     return null;
   }
 }

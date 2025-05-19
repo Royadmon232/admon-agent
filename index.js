@@ -648,6 +648,32 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+// Test endpoint for GPT-4o
+app.get('/test-gpt', async (req, res) => {
+  try {
+    const testMessage = "האם הביטוח שלי כולל רעידת אדמה?";
+    const response = await semanticLookup(testMessage);
+    
+    if (response) {
+      res.json({
+        success: true,
+        message: response
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: "Failed to get response from GPT-4o"
+      });
+    }
+  } catch (error) {
+    console.error("Test endpoint error:", error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // =============================
 // 5. Start the Express server
 // =============================
