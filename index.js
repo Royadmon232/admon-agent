@@ -27,6 +27,7 @@ import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import stringSimilarity from "string-similarity";
 import fs from "fs";
+import { semanticLookup } from './agentController.js';
 
 dotenv.config();
 
@@ -600,16 +601,24 @@ app.post("/simulate", async (req, res) => {
   try {
     const userText = req.body.text || "";
     const demoPhone = "local-demo"; // constant fake sender
+    
     if (!userText) {
-      return res.status(400).json({ error: "text field is required" });
+      return res.status(400).json({ 
+        error: "text field is required",
+        answer: "אנא הכנס טקסט להודעה שלך."
+      });
     }
+
     console.log(`[SIMULATE INCOMING] From: ${demoPhone} | Message: ${userText}`);
     const reply = await processMessage(userText, demoPhone, true);
     console.log(`[SIMULATE OUTGOING] To: ${demoPhone} | Reply: ${reply}`);
-    return res.json({ answer: reply });
+    
+    return res.json({ answer: reply || "מצטער, לא הצלחתי לעבד את ההודעה שלך כרגע. נסה שוב מאוחר יותר." });
   } catch (err) {
     console.error("Error in /simulate endpoint:", err?.message || err);
-    return res.status(500).json({ error: "internal error during simulation" });
+    return res.json({ 
+      answer: "מצטער, נתקלתי בשגיאה בעיבוד ההודעה שלך. נסה שוב בעוד מספר רגעים."
+    });
   }
 });
 
@@ -660,35 +669,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-
-// ---- cosine helper for semantic search ----
-export function cosine(a, b) {
-  let dot = 0,
-    na = 0,
-    nb = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    na += a[i] * a[i];
-    nb += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(na) * Math.sqrt(nb));
-}
-
-const EMB_MODEL = "text-embedding-3-small";
-const SEMANTIC_THRESHOLD = 0.83; // tune later
-
-async function semanticLookup(userMsg) {
-  const { data } = await axios.post(
-    "https://api.openai.com/v1/embeddings",
-    { model: EMB_MODEL, input: userMsg },
-    { headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` } },
-  );
-  const u = data.data[0].embedding;
-
-  let best = { score: 0, answer: null };
-  for (const row of KNOWLEDGE) {
-    const score = cosine(u, row.v);
-    if (score > best.score) best = { score, answer: row.a };
-  }
-  return best.score >= SEMANTIC_THRESHOLD ? best.answer : null;
-}
