@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import axios from 'axios';
-import { cosine } from './index.js';
+import { cosine } from './utils.js';
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.83;
