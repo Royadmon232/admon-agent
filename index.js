@@ -27,7 +27,8 @@ import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import stringSimilarity from "string-similarity";
 import fs from "fs";
-import { semanticLookup } from './agentController.js';
+import { semanticLookup, normalize } from './agentController.js';
+import { askGPT } from './gptHelper.js';
 
 dotenv.config();
 
@@ -600,38 +601,22 @@ app.get("/webhook", (req, res) => {
 // =============================
 // Local Web Chat Simulator Endpoint
 // =============================
-// Helper function for lexical matching
-async function lexicalLookup(text) {
-  if (!stringSimilarity || !insuranceKnowledgeBase.insurance_home_il_qa) return null;
-  
-  try {
-    const qs = insuranceKnowledgeBase.insurance_home_il_qa.map(r => r.question);
-    const { bestMatch } = stringSimilarity.findBestMatch(text, qs);
-    if (bestMatch.rating >= 0.75) {
-      return insuranceKnowledgeBase.insurance_home_il_qa[bestMatch.bestMatchIndex].answer;
-    }
-  } catch (e) {
-    console.error('Lexical lookup failed:', e.message);
-  }
-  return null;
-}
-
 app.post('/simulate', async (req, res) => {
   try {
-    const text = req.body?.text?.trim();
+    const text = normalize(req.body?.text);   // instead of .trim()
     if (!text) return res.status(400).json({ answer: 'הודעה ריקה התקבלה.' }); // Respond with JSON
 
     let answer = await semanticLookup(text);
+
     if (!answer) {
-      // Assuming lexicalLookup is the local one based on context:
-      answer = await lexicalLookup(text); 
+      answer = await askGPT(text);      // ← new GPT fallback
     }
 
     if (answer) {
       res.json({ answer: answer }); // Respond with JSON
     } else {
       // Send a user-friendly message if no answer is found, as JSON
-      res.json({ answer: 'לא מצאתי תשובה מתאימה לשאלתך. נסה לנסח מחדש או לשאול שאלה אחרת.' }); 
+      res.json({ answer: 'מצטער, לא מצאתי תשובה כרגע.' }); 
     }
   } catch (e) {
     console.error('Unhandled /simulate error:', e);
