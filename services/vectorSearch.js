@@ -23,7 +23,7 @@ import 'dotenv/config';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
-export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.80) {
+export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.60) {
   const emb = await getEmbedding(normalize(userQuestion));
   try {
     const { rows } = await pool.query(

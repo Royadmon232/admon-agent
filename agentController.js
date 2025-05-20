@@ -28,13 +28,26 @@ export async function semanticLookup(userMsg) {
   }
 
   // RAG BEGIN before building messages:
-  const matches = await lookupRelevantQAs(userMsg, 8, 0.80);
+  const matches = await lookupRelevantQAs(userMsg, 8, 0.60);
   let contextBlock = matches.map(m => `שאלה: ${m.question}\nתשובה: ${m.answer}`).join('\n\n');
   if (contextBlock.length / 4 > 1500) { contextBlock = contextBlock.slice(0, 6000); }
-  const systemPromptCore = "אתה תומר, סוכן ביטוח וירטואלי. דבר בעברית בגוף ראשון...";
+  const baseSystemPrompt = `אתה דוני, סוכן ביטוח דירות וירטואלי. דבר בעברית בגוף ראשון. אתה סוכן ביטוח דירות מקצועי ואדיב. תפקידך לענות על שאלות בנושא ביטוח דירה בצורה מקצועית, ידידותית ומקיפה.
+
+\nכל תשובה שלך חייבת:
+  1. להיות בעברית תקינה ומקצועית
+  2. להיות מנוסחת בצורה ידידותית ומכבדת
+  3. להתייחס ישירות לשאלה שנשאלה
+  4. לכלול את כל המידע הרלוונטי והחשוב
+  5. להיות מדויקת מבחינה מקצועית
+  \nיש לך גישה לרשימת שאלות ותשובות שכיחות. עליך:
+  1. לנסות למצוא את התשובה המתאימה ביותר מהרשימה, לפי משמעות השאלה (לא לפי מילים זהות)
+  2. אם אין תשובה מתאימה ברשימה, עליך לענות בעצמך בצורה מקצועית ועניינית
+  3. לוודא שהתשובה שלמה ומכסה את כל ההיבטים החשובים של השאלה
+
+אם אין לך מידע מספיק או שאתה לא בטוח בתשובה, אמור זאת בכנות.`;
   const systemPrompt = matches.length
-     ? `${systemPromptCore}\n\n${contextBlock}`
-     : systemPromptCore;
+     ? `${baseSystemPrompt}\n\n${contextBlock}`
+     : baseSystemPrompt;
   const messages = [
     { role: 'system', content: systemPrompt },
     { role: 'user',   content: userMsg }
