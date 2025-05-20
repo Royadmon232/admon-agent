@@ -54,6 +54,15 @@ export async function semanticLookup(userMsg) {
   ];
   // RAG END
 
+  // RAG-TRACE BEGIN
+  if (matches.length) {
+    console.log('[RAG] top matches:',
+      matches.map(m => ({ q: m.question.slice(0,40)+'…', score: m.score.toFixed(2) })));
+  } else {
+    console.log('[RAG] no KB match → fallback');
+  }
+  // RAG-TRACE END
+
   // Commenting out the old knowledge base loading as it's now handled by RAG
   /*
   if (KNOWLEDGE.length === 0) {
