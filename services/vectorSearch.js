@@ -1,4 +1,4 @@
-// === CURSOR BACKUP START (2024-03-21) ===
+/* === CURSOR BACKUP START (2024-03-21) ===
 import { normalize } from '../utils/normalize.js';
 import { getEmbedding } from '../utils/embeddingUtils.js';
 import pg from 'pg';
@@ -13,9 +13,16 @@ export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.80)
      FROM insurance_qa ORDER BY embedding <=> $1 LIMIT $2`, [emb, topK]);
   return rows.filter(r => r.score >= minScore);
 } 
-// === CURSOR BACKUP END ===
+=== CURSOR BACKUP END === */
 
 // PHASE-1 BEGIN
+import { normalize } from '../utils/normalize.js';
+import { getEmbedding } from '../utils/embeddingUtils.js';
+import pg from 'pg';
+import 'dotenv/config';
+
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
 export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.80) {
   const emb = await getEmbedding(normalize(userQuestion));
   try {
