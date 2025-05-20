@@ -21,12 +21,11 @@ Meta/Facebook/WhatsApp setup required:
 */
 
 import express from "express";
-import axios from "axios";
 import cors from "cors";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import fs from "fs";
-import { semanticLookup, normalize } from './agentController.js';
+import { semanticLookup, normalize, sendWhatsAppMessage } from './agentController.js';
 
 dotenv.config();
 
@@ -240,15 +239,9 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
     delete conversationMemory[fromId];
     delete userSessionData[fromId];
     replyToSend = "כל המידע שלך נמחק מהמערכת בהתאם לבקשתך. אם תרצה להתחיל שיחה חדשה, אשמח לעזור!";
-    if (!simulateMode && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+    if (!simulateMode) {
       console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
-      await axios.post(
-        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-        { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
-        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
-      );
-    } else if (!simulateMode) {
-      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (WhatsApp send skipped due to missing config)`);
+      await sendWhatsAppMessage(fromId, replyToSend);
     }
     if (simulateMode) return replyToSend; else return;
   }
@@ -260,15 +253,9 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
     if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
       conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
     }
-    if (!simulateMode && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+    if (!simulateMode) {
       console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
-      await axios.post(
-        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-        { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
-        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
-      );
-    } else if (!simulateMode) {
-      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (WhatsApp send skipped due to missing config)`);
+      await sendWhatsAppMessage(fromId, replyToSend);
     }
     if (simulateMode) return replyToSend; else return;
   }
@@ -296,14 +283,8 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
       if (simulateMode) return replyToSend;
 
       console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (from FAQ)`);
-      if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
-        await axios.post(
-          `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-          { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
-          { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
-        );
-      } else {
-        console.log("WhatsApp send skipped for FAQ due to missing config");
+      if (!simulateMode) {
+        await sendWhatsAppMessage(fromId, replyToSend);
       }
       return;
     }
@@ -336,14 +317,8 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
       if (simulateMode) return replyToSend;
       
       console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Questionnaire)`);
-      if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
-        await axios.post(
-          `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-          { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
-          { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
-        );
-      } else {
-        console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Questionnaire - WhatsApp send skipped)`);
+      if (!simulateMode) {
+        await sendWhatsAppMessage(fromId, replyToSend);
       }
       return;
     }
@@ -357,25 +332,13 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
       conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
     }
     
-    if (!simulateMode && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+    if (!simulateMode) {
       console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Recommendation)`);
-      await axios.post(
-        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-        { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
-        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
-      );
+      await sendWhatsAppMessage(fromId, replyToSend);
+      
       const feedbackMsg = "אשמח לדעת מה דעתך על השירות שקיבלת מהבוט ועל ההמלצה לביטוח הדירה. האם יש משהו שנוכל לשפר?";
       console.log(`[OUTGOING] To: ${fromId} | Message: ${feedbackMsg} (Feedback Request)`);
-      await axios.post(
-        `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-        { messaging_product: "whatsapp", to: fromId, text: { body: feedbackMsg } },
-        { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
-      );
-    } else if (!simulateMode) {
-      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (Recommendation - WhatsApp send skipped)`);
-      if (WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
-         console.log("Feedback message would also have been sent.");
-      }
+      await sendWhatsAppMessage(fromId, feedbackMsg);
     }
     if (simulateMode) return replyToSend;
     else return;
@@ -392,15 +355,9 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
     conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
   }
   
-  if (!simulateMode && replyToSend && WHATSAPP_API_TOKEN && WHATSAPP_PHONE_NUMBER_ID) {
+  if (!simulateMode && replyToSend) {
     console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-      { messaging_product: "whatsapp", to: fromId, text: { body: replyToSend } },
-      { headers: { Authorization: `Bearer ${WHATSAPP_API_TOKEN}`, "Content-Type": "application/json" } }
-    );
-  } else if (!simulateMode && replyToSend) {
-    console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (WhatsApp send skipped due to missing config)`);
+    await sendWhatsAppMessage(fromId, replyToSend);
   }
 
   if (simulateMode) {
