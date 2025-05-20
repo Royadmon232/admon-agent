@@ -97,5 +97,33 @@ ${KNOWLEDGE.map(qa => `שאלה: ${qa.question}\nתשובה: ${qa.answer}\n`).jo
   }
 }
 
+// WhatsApp message sending function
+export async function sendWhatsAppMessage(to, message) {
+  if (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
+    console.error("❌ WhatsApp API configuration missing");
+    return;
+  }
+
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      { 
+        messaging_product: "whatsapp", 
+        to: to, 
+        text: { body: message } 
+      },
+      { 
+        headers: { 
+          Authorization: `Bearer ${process.env.WHATSAPP_API_TOKEN}`, 
+          "Content-Type": "application/json" 
+        } 
+      }
+    );
+  } catch (error) {
+    console.error("Error sending WhatsApp message:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
 // Export the normalize function
 export { normalize }; 
