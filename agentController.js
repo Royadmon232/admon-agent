@@ -105,5 +105,3 @@ export async function sendWhatsAppMessage(to, message) {
   }
 }
 
-// Export the normalize function
-export { normalize }; 
