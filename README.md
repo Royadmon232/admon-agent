@@ -34,5 +34,11 @@ To update the knowledge base embeddings:
 npm start
 ```
 
+### Database Setup and Seeding
+To set up and seed the database with embeddings, you'll need to configure the `DATABASE_URL`. If you're deploying to Render, this will typically be an internal service URL. Once the `DATABASE_URL` is set in your environment (e.g., in your `.env` file for local development or as an environment variable in your deployment service), run the following command to populate the database with question-answer embeddings:
+```bash
+npm run seed:embeddings
+```
+
 ## Deployment
 The bot is configured for deployment on Render. See `render.yaml` for details.

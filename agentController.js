@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import axios from 'axios';
+import { lookupRelevantQAs } from './services/vectorSearch.js';
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.78;
@@ -26,37 +27,48 @@ export async function semanticLookup(userMsg) {
     return "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
   }
 
+  // RAG BEGIN before building messages:
+  const matches = await lookupRelevantQAs(userMsg, 8, 0.80);
+  let contextBlock = matches.map(m => `שאלה: ${m.question}\nתשובה: ${m.answer}`).join('\n\n');
+  if (contextBlock.length / 4 > 1500) { contextBlock = contextBlock.slice(0, 6000); }
+  const systemPromptCore = "אתה תומר, סוכן ביטוח וירטואלי. דבר בעברית בגוף ראשון...";
+  const systemPrompt = matches.length
+     ? `${systemPromptCore}\n\n${contextBlock}`
+     : systemPromptCore;
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user',   content: userMsg }
+  ];
+  // RAG END
+
+  // Commenting out the old knowledge base loading as it's now handled by RAG
+  /*
   if (KNOWLEDGE.length === 0) {
     console.error("❌ Knowledge base is empty");
     return "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
   }
 
   const systemPrompt = `אתה סוכן ביטוח דירות מקצועי ואדיב. תפקידך לענות על שאלות בנושא ביטוח דירה בצורה מקצועית, ידידותית ומקיפה.
-
-כל תשובה שלך חייבת:
+\nכל תשובה שלך חייבת:
 1. להיות בעברית תקינה ומקצועית
 2. להיות מנוסחת בצורה ידידותית ומכבדת
 3. להתייחס ישירות לשאלה שנשאלה
 4. לכלול את כל המידע הרלוונטי והחשוב
 5. להיות מדויקת מבחינה מקצועית
-
-יש לך גישה לרשימת שאלות ותשובות שכיחות. עליך:
+\nיש לך גישה לרשימת שאלות ותשובות שכיחות. עליך:
 1. לנסות למצוא את התשובה המתאימה ביותר מהרשימה, לפי משמעות השאלה (לא לפי מילים זהות)
 2. אם אין תשובה מתאימה ברשימה, עליך לענות בעצמך בצורה מקצועית ועניינית
 3. לוודא שהתשובה שלמה ומכסה את כל ההיבטים החשובים של השאלה
-
-הנה רשימת השאלות והתשובות:
+\nהנה רשימת השאלות והתשובות:
 ${KNOWLEDGE.map(qa => `שאלה: ${qa.question}\nתשובה: ${qa.answer}\n`).join('\n')}`;
+  */
 
   try {
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
         model: "gpt-4o",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMsg }
-        ],
+        messages: messages,
         temperature: 0.7,
         max_tokens: 500
       },

@@ -20,14 +20,12 @@ Meta/Facebook/WhatsApp setup required:
 - More info: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/
 */
 
+import 'dotenv/config';
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
-import dotenv from "dotenv";
 import fs from "fs";
 import { semanticLookup, sendWhatsAppMessage } from './agentController.js';
-
-dotenv.config();
 
 const app = express();
 app.use(express.static('public'));
