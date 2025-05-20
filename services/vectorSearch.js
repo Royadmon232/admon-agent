@@ -28,7 +28,7 @@ export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.60)
   try {
     const { rows } = await pool.query(
       `SELECT question, answer, 1 - (embedding <=> $1) AS score
-       FROM insurance_qa ORDER BY embedding <=> $1 LIMIT $2`, [emb, topK]);
+       FROM insurance_qa ORDER BY embedding <=> $1 LIMIT $2`, [JSON.stringify(emb), topK]);
     return rows.filter(r => r.score >= minScore);
   } catch (err) {
     if (err.code === '42P01') { // undefined_table error
