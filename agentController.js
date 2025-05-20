@@ -1,30 +1,10 @@
 import fs from 'fs/promises';
 import axios from 'axios';
-import pkg from 'unorm';
-const { normalize: unormNormalize } = pkg;
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.78;
 const PRIMARY_MODEL = 'text-embedding-3-small';
 const FALLBACK_MODEL = 'text-embedding-ada-002';
-
-const hebEndings = { ך:'כ', ם:'מ', ן:'נ', ף:'פ', ץ:'צ' };
-
-/** Basic Hebrew text normalizer:
- *  • NFKC / NFD canonical form
- *  • strips punctuation
- *  • replaces final letters with regular forms
- *  • collapses multiple spaces
- *  • lower-cases
- */
-function normalize(t = "") {
-  return unormNormalize(t)
-    .replace(/[.,!?;:()״""\-'"`]/g, " ")
-    .replace(/[ךםןףץ]/g, c => hebEndings[c])
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-}
 
 // Load knowledge base once at startup
 let KNOWLEDGE = [];

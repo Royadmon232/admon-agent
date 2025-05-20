@@ -25,7 +25,7 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import fs from "fs";
-import { semanticLookup, normalize, sendWhatsAppMessage } from './agentController.js';
+import { semanticLookup, sendWhatsAppMessage } from './agentController.js';
 
 dotenv.config();
 
@@ -186,9 +186,9 @@ const HUMAN_AGENT_CONTACT =
   "תוכל ליצור קשר עם סוכן אנושי בטלפון: 03-1234567 או במייל: agent@example.com";
 
 function isHumanAgentRequest(message) {
-  const normalized = message.toLowerCase();
+  const lowerMessage = message.toLowerCase();
   return HUMAN_AGENT_KEYWORDS.some((keyword) =>
-    normalized.includes(keyword.toLowerCase()),
+    lowerMessage.includes(keyword.toLowerCase()),
   );
 }
 
@@ -205,9 +205,9 @@ const FORGET_ME_KEYWORDS = [
 ];
 
 function isForgetMeRequest(message) {
-  const normalized = message.toLowerCase();
+  const lowerMessage = message.toLowerCase();
   return FORGET_ME_KEYWORDS.some((keyword) =>
-    normalized.includes(keyword.toLowerCase()),
+    lowerMessage.includes(keyword.toLowerCase()),
   );
 }
 
@@ -391,7 +391,7 @@ app.get("/webhook", (req, res) => {
 // =============================
 app.post('/simulate', async (req, res) => {
   try {
-    const text = normalize(req.body?.text);
+    const text = req.body?.text;
     if (!text) return res.status(400).json({ answer: 'הודעה ריקה התקבלה.' });
 
     const answer = await semanticLookup(text);
@@ -412,32 +412,28 @@ app.post('/simulate', async (req, res) => {
 // =============================
 app.post("/webhook", async (req, res) => {
   try {
-    const entry = req.body.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-    const messages = value?.messages;
+    const { object, entry } = req.body;
 
-    if (!messages || !Array.isArray(messages)) {
-      return res.sendStatus(200);
-    }
-
-    for (const message of messages) {
-      const from = message.from;
-      const userMessageContent = message.text?.body;
-
-      if (!userMessageContent || !from) {
-        continue;
+    if (object === "whatsapp_business_account") {
+      for (const ent of entry) {
+        for (const change of ent.changes) {
+          if (change.value.messages) {
+            for (const message of change.value.messages) {
+              const fromId = message.from;
+              const text = req.body?.text || "";
+              
+              // Process the message
+              await processMessage(text, fromId);
+            }
+          }
+        }
       }
-      console.log(`[INCOMING] From: ${from} | Message: ${userMessageContent}`);
-      
-      await processMessage(userMessageContent, from, false);
+      res.status(200).send("OK");
+    } else {
+      res.sendStatus(404);
     }
-    res.sendStatus(200);
   } catch (error) {
-    console.error(
-      "Error handling webhook:",
-      error?.response?.data || error.message,
-    );
+    console.error("Error in webhook:", error);
     res.sendStatus(500);
   }
 });
