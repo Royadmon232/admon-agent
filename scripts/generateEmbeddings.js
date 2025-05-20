@@ -76,7 +76,7 @@ async function seedEmbeddings() {
         VALUES ($1, $2, $3)
         RETURNING id;
       `;
-      await client.query(insertQuery, [originalQuestion, answer, embedding]);
+      await client.query(insertQuery, [originalQuestion, answer, JSON.stringify(embedding)]);
       rowsInserted++;
       console.log(`Inserted: \"${originalQuestion.substring(0,50)}...\"`);
     }
