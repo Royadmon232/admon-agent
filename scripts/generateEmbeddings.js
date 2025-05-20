@@ -22,21 +22,15 @@ async function seedEmbeddings() {
     client = await pool.connect();
     console.log('Successfully connected to the database.');
 
-    // Ensure pgvector extension is enabled
-    await client.query('CREATE EXTENSION IF NOT EXISTS vector;');
-    console.log('Ensured pgvector extension exists.');
-
-    // Create table if it doesn't exist
-    const createTableQuery = `
-      CREATE TABLE IF NOT EXISTS insurance_qa (
+    // PHASE-2: Create extension and table
+    await client.query('CREATE EXTENSION IF NOT EXISTS vector');
+    await client.query(`CREATE TABLE IF NOT EXISTS insurance_qa(
         id SERIAL PRIMARY KEY,
-        question TEXT UNIQUE, -- Ensuring question is unique to simplify UPSERT/skip logic
-        answer TEXT,
-        embedding VECTOR(${EMBEDDING_VECTOR_DIMENSION})
-      );
-    `;
-    await client.query(createTableQuery);
-    console.log('Ensured insurance_qa table exists.');
+        question TEXT,
+        answer   TEXT,
+        embedding vector(1536)
+    );`);
+    console.log('[seed] table ready');
 
     // Load insurance knowledge base
     const rawData = await fs.readFile(KNOWLEDGE_FILE_PATH, 'utf8');

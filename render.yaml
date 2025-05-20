@@ -6,8 +6,7 @@ services:
     # ---------- Build step ----------
     buildCommand: |
       npm install
-      npm run embed              # ← creates embeddings using OPENAI_API_KEY
-      npm run lint || true       # ignore exit code if nothing to fix
+      npm run seed:embeddings
 
     # ---------- Start step ----------
-    startCommand: npm start 
+    startCommand: node index.js 

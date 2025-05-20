@@ -1,3 +1,5 @@
+import 'dotenv/config';  // ensures DATABASE_URL loaded
+
 /*
 ============================
 WhatsApp Home Insurance Bot (Node.js)
@@ -20,7 +22,6 @@ Meta/Facebook/WhatsApp setup required:
 - More info: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/
 */
 
-import 'dotenv/config';
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
