@@ -1,5 +1,6 @@
 import twilio from 'twilio';
 import 'dotenv/config';
+import PQueue from 'p-queue';
 
 // Twilio Client Initialization
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -14,6 +15,41 @@ if (accountSid && authToken) {
   console.error('❌ Critical Twilio environment variables TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN are missing. Twilio client not initialized.');
   // Depending on the application's needs, you might throw an error here
   // or functions below will fail gracefully if client is undefined.
+}
+
+// p-queue setup: 5 concurrent operations
+const queue = new PQueue({ concurrency: 5 });
+
+// Helper function for retrying with exponential backoff
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * Sends a message via Twilio with retry and queue.
+ * @param {object} messagePayload - The payload for client.messages.create().
+ * @param {string} recipientInfo - For logging purposes (e.g., "WhatsApp to ${to}").
+ * @returns {Promise<object>} The Twilio message object if successful.
+ * @throws {Error} If all retry attempts fail.
+ */
+async function sendMessageWithRetryAndQueue(messagePayload, recipientInfo) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      // Add the client.messages.create call to the queue
+      const message = await queue.add(() => client.messages.create(messagePayload));
+      console.log(`Attempt ${attempt}: Successfully sent ${recipientInfo}. SID: ${message.sid}`);
+      return message; // Success
+    } catch (error) {
+      lastError = error;
+      console.warn(`Attempt ${attempt}: Failed to send ${recipientInfo}. Error: ${error.message}`);
+      if (attempt < 3) {
+        const delayTime = Math.pow(2, attempt -1) * 1000; // 1s, 2s
+        console.log(`Retrying in ${delayTime / 1000}s...`);
+        await delay(delayTime);
+      }
+    }
+  }
+  console.error(`All ${3} attempts to send ${recipientInfo} failed. Last error: ${lastError.message}`);
+  throw lastError; // All attempts failed
 }
 
 /**
@@ -39,7 +75,7 @@ async function sendWapp(to, body, mediaUrl = null) {
 
   const messageData = {
     from: `whatsapp:${whatsAppFromNumber}`,
-    to: `whatsapp:${to}`, // Assuming 'to' is a plain number that needs prefix
+    to: `whatsapp:${to}`,
     body: body,
   };
 
@@ -52,11 +88,11 @@ async function sendWapp(to, body, mediaUrl = null) {
   }
 
   try {
-    const message = await client.messages.create(messageData);
-    console.log(`✅ WhatsApp message sent to ${to}. SID: ${message.sid}`);
+    const message = await sendMessageWithRetryAndQueue(messageData, `WhatsApp to ${to}`);
+    console.log(`✅ WhatsApp message sent to ${to}. SID: ${message.sid}`); // Final success log
     return { success: true, sid: message.sid };
   } catch (error) {
-    console.error(`❌ Error sending WhatsApp message to ${to}: ${error.message}`, error);
+    console.error(`❌ Error sending WhatsApp message to ${to} after retries: ${error.message}`, error);
     return { success: false, error: error.message, details: error };
   }
 }
@@ -81,16 +117,18 @@ async function smsFallback(to, body) {
     return { success: false, error: '"to" and "body" are required.' };
   }
 
+  const messageData = {
+    body: body,
+    messagingServiceSid: smsServiceSid,
+    to: to,
+  };
+
   try {
-    const message = await client.messages.create({
-      body: body,
-      messagingServiceSid: smsServiceSid, // Using Messaging Service SID
-      to: to, // Assuming 'to' is a full E.164 number
-    });
-    console.log(`✅ SMS fallback sent to ${to}. SID: ${message.sid}`);
+    const message = await sendMessageWithRetryAndQueue(messageData, `SMS fallback to ${to}`);
+    console.log(`✅ SMS fallback sent to ${to}. SID: ${message.sid}`); // Final success log
     return { success: true, sid: message.sid };
   } catch (error) {
-    console.error(`❌ Error sending SMS fallback to ${to}: ${error.message}`, error);
+    console.error(`❌ Error sending SMS fallback to ${to} after retries: ${error.message}`, error);
     return { success: false, error: error.message, details: error };
   }
 }
