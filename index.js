@@ -27,11 +27,13 @@ import cors from "cors";
 import bodyParser from "body-parser";
 import fs from "fs";
 import { semanticLookup, sendWhatsAppMessage } from './agentController.js';
+import { sendWapp, smsFallback } from "./services/twilioService.js";
 
 const app = express();
 app.use(express.static('public'));
 app.use(cors());
 app.use(bodyParser.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Load all secrets from environment variables
 const WHATSAPP_API_TOKEN = process.env.WHATSAPP_API_TOKEN;
@@ -434,6 +436,73 @@ app.post("/webhook", async (req, res) => {
   } catch (error) {
     console.error("Error in webhook:", error);
     res.sendStatus(500);
+  }
+});
+
+// =============================
+// Local Web Chat Simulator Endpoint
+// =============================
+app.post('/simulate', async (req, res) => {
+  const { message, from } = req.body; // Expects JSON: { "message": "...", "from": "..." }
+  if (!message || !from) {
+    return res.status(400).send("Missing message or from in request body.");
+  }
+  console.log(`SIMULATE: Received message: "${message}" from: ${from}`);
+  try {
+    const reply = await processMessage(message, from, true); // true for simulateMode
+    res.send({ reply });
+  } catch (error) {
+    console.error("SIMULATE: Error processing message:", error);
+    res.status(500).send("Error processing message");
+  }
+});
+
+// Twilio Webhook Endpoint
+app.post('/twilio/webhook', async (req, res) => {
+  const messageText = req.body.Body;
+  const senderPhoneWithPrefix = req.body.From; // e.g., 'whatsapp:+14155238886' or '+14155238886'
+
+  console.log(`[Twilio] Received message from ${senderPhoneWithPrefix}: "${messageText}"`);
+
+  if (!messageText || !senderPhoneWithPrefix) {
+    console.error('[Twilio] Missing Body or From in webhook payload.');
+    return res.status(400).send('Missing message body or sender phone.');
+  }
+
+  // Remove 'whatsapp:' prefix if present, as twilioService functions expect a plain E.164 number for 'to'
+  const senderPhone = senderPhoneWithPrefix.replace(/^whatsapp:/i, '');
+
+  try {
+    const botResponse = await semanticLookup(messageText);
+
+    if (!botResponse || typeof botResponse !== 'string' || botResponse.startsWith("מצטער, אירעה שגיאה")) {
+      console.error(`[Twilio] Failed to get valid response from semanticLookup for: "${messageText}". Response: ${botResponse}`);
+      // Optionally, send a generic error message back to the user if semanticLookup failed
+      // For now, just return 500 as the original plan was to return 500 on failure to get bot response
+      return res.status(500).send('Failed to get bot response.');
+    }
+
+    console.log(`[Twilio] Bot response for ${senderPhone}: "${botResponse.substring(0, 60)}..."`);
+
+    const wappResult = await sendWapp(senderPhone, botResponse);
+
+    if (wappResult.success) {
+      console.log(`[Twilio] Successfully sent WhatsApp reply to ${senderPhone}. SID: ${wappResult.sid}`);
+      return res.status(200).type('text/xml').send('<Response/>'); // Twilio expects XML response for success
+    } else {
+      console.warn(`[Twilio] Failed to send WhatsApp reply to ${senderPhone}, attempting SMS fallback. Error: ${wappResult.error}`);
+      const smsResult = await smsFallback(senderPhone, botResponse);
+      if (smsResult.success) {
+        console.log(`[Twilio] Successfully sent SMS fallback to ${senderPhone}. SID: ${smsResult.sid}`);
+        return res.status(200).type('text/xml').send('<Response/>');
+      } else {
+        console.error(`[Twilio] Failed to send SMS fallback to ${senderPhone}. Error: ${smsResult.error}`);
+        return res.status(500).send('Failed to send response via Twilio WhatsApp or SMS.');
+      }
+    }
+  } catch (error) {
+    console.error(`[Twilio] Unexpected error processing webhook for ${senderPhoneWithPrefix}:`, error);
+    return res.status(500).send('Internal server error processing Twilio webhook.');
   }
 });
 
