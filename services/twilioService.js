@@ -1,6 +1,7 @@
 import twilio from 'twilio';
 import 'dotenv/config';
 import PQueue from 'p-queue';
+import pg from 'pg';
 
 // Twilio Client Initialization
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -19,6 +20,26 @@ if (accountSid && authToken) {
 
 // p-queue setup: 5 concurrent operations
 const queue = new PQueue({ concurrency: 5 });
+
+// === Delivery Log Setup ===
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
+// Ensure delivery_log table exists
+(async () => {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS delivery_log (
+      id SERIAL PRIMARY KEY,
+      customer TEXT,
+      channel  TEXT,
+      status   TEXT,
+      template TEXT,
+      ts TIMESTAMPTZ DEFAULT now()
+    );`);
+    console.log('[twilioService] ✅ delivery_log table ready');
+  } catch (err) {
+    console.error('[twilioService] ⚠️  Failed to ensure delivery_log table:', err.message);
+  }
+})();
 
 // Helper function for retrying with exponential backoff
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -90,9 +111,11 @@ async function sendWapp(to, body, mediaUrl = null) {
   try {
     const message = await sendMessageWithRetryAndQueue(messageData, `WhatsApp to ${to}`);
     console.log(`✅ WhatsApp message sent to ${to}. SID: ${message.sid}`); // Final success log
+    await logDelivery('success', 'whatsapp');
     return { success: true, sid: message.sid };
   } catch (error) {
     console.error(`❌ Error sending WhatsApp message to ${to} after retries: ${error.message}`, error);
+    await logDelivery(error.message || 'error', 'whatsapp');
     return { success: false, error: error.message, details: error };
   }
 }
@@ -126,10 +149,28 @@ async function smsFallback(to, body) {
   try {
     const message = await sendMessageWithRetryAndQueue(messageData, `SMS fallback to ${to}`);
     console.log(`✅ SMS fallback sent to ${to}. SID: ${message.sid}`); // Final success log
+    await logDelivery('success', 'sms');
     return { success: true, sid: message.sid };
   } catch (error) {
     console.error(`❌ Error sending SMS fallback to ${to} after retries: ${error.message}`, error);
+    await logDelivery(error.message || 'error', 'sms');
     return { success: false, error: error.message, details: error };
+  }
+}
+
+/**
+ * Write a delivery attempt to the database.
+ * @param {string} status  - e.g., 'success' or error message.
+ * @param {string} channel - 'whatsapp' | 'sms'
+ */
+async function logDelivery(status, channel) {
+  try {
+    await pool.query(
+      'INSERT INTO delivery_log (channel, status) VALUES ($1, $2)',
+      [channel, status]
+    );
+  } catch (err) {
+    console.error('[twilioService] ⚠️  Failed to log delivery:', err.message);
   }
 }
 
