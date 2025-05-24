@@ -5,7 +5,7 @@ services:
 
     # ---------- Build step ----------
     buildCommand: |
-      npm install
+      npm ci
       npm run seed:embeddings
 
     # ---------- Start step ----------
