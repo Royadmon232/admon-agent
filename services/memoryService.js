@@ -1,8 +1,19 @@
 import pg from 'pg';
 import 'dotenv/config';
 
-// Use existing database connection
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+// Configure PostgreSQL connection pool
+const pool = new pg.Pool({
+  user: process.env.PGUSER,
+  host: process.env.PGHOST,
+  database: process.env.PGDATABASE,
+  password: process.env.PGPASSWORD,
+  port: process.env.PGPORT
+});
+
+// Log successful connection
+pool.on('connect', () => {
+  console.info('✅ PostgreSQL connected successfully for memoryService.');
+});
 
 // Ensure tables exist
 (async () => {
