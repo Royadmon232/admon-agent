@@ -1,0 +1,117 @@
+import pg from 'pg';
+import 'dotenv/config';
+
+// Use existing database connection
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
+// Ensure tables exist
+(async () => {
+  try {
+    // Create customers table
+    await pool.query(`CREATE TABLE IF NOT EXISTS customers (
+      phone TEXT PRIMARY KEY,
+      first_name TEXT,
+      stage TEXT DEFAULT 'new'
+    );`);
+    
+    // Create conversation memory table
+    await pool.query(`CREATE TABLE IF NOT EXISTS convo_memory (
+      id SERIAL PRIMARY KEY,
+      phone TEXT REFERENCES customers(phone) ON DELETE CASCADE,
+      key TEXT NOT NULL,
+      value TEXT,
+      ts TIMESTAMPTZ DEFAULT now()
+    );`);
+    
+    console.log('[memoryService] ✅ customers and convo_memory tables ready');
+  } catch (err) {
+    console.error('[memoryService] ⚠️  Failed to ensure tables:', err.message);
+  }
+})();
+
+/**
+ * Store a key-value pair in conversation memory for a phone number
+ * @param {string} phone - Customer phone number
+ * @param {string} key - Memory key
+ * @param {string} value - Memory value
+ * @returns {Promise<void>}
+ */
+export async function remember(phone, key, value) {
+  try {
+    // Ensure customer exists first
+    await pool.query(
+      'INSERT INTO customers (phone) VALUES ($1) ON CONFLICT (phone) DO NOTHING',
+      [phone]
+    );
+    
+    // Insert memory record
+    await pool.query(
+      'INSERT INTO convo_memory (phone, key, value) VALUES ($1, $2, $3)',
+      [phone, key, value]
+    );
+  } catch (err) {
+    console.error('[memoryService] ⚠️  Failed to remember:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * Retrieve all conversation memory for a phone number
+ * @param {string} phone - Customer phone number
+ * @returns {Promise<object>} Object with key-value pairs from memory
+ */
+export async function recall(phone) {
+  try {
+    const { rows } = await pool.query(
+      'SELECT key, value FROM convo_memory WHERE phone = $1 ORDER BY ts DESC',
+      [phone]
+    );
+    
+    // Convert rows to key-value object (latest values take precedence)
+    const memory = {};
+    for (const row of rows) {
+      if (!memory.hasOwnProperty(row.key)) {
+        memory[row.key] = row.value;
+      }
+    }
+    
+    return memory;
+  } catch (err) {
+    console.error('[memoryService] ⚠️  Failed to recall:', err.message);
+    return {};
+  }
+}
+
+/**
+ * Update or insert customer information
+ * @param {string} phone - Customer phone number
+ * @param {object} fieldsObject - Object with customer fields to update
+ * @returns {Promise<void>}
+ */
+export async function updateCustomer(phone, fieldsObject) {
+  try {
+    const fields = Object.keys(fieldsObject);
+    const values = Object.values(fieldsObject);
+    
+    if (fields.length === 0) {
+      return;
+    }
+    
+    // Build SET clause for UPDATE
+    const setClause = fields.map((field, index) => `${field} = $${index + 2}`).join(', ');
+    
+    // Build conflict resolution clause
+    const conflictClause = fields.map((field, index) => `${field} = EXCLUDED.${field}`).join(', ');
+    
+    const query = `
+      INSERT INTO customers (phone, ${fields.join(', ')}) 
+      VALUES ($1, ${fields.map((_, index) => `$${index + 2}`).join(', ')})
+      ON CONFLICT (phone) DO UPDATE SET ${conflictClause}
+    `;
+    
+    await pool.query(query, [phone, ...values]);
+  } catch (err) {
+    console.error('[memoryService] ⚠️  Failed to update customer:', err.message);
+    throw err;
+  }
+} 
