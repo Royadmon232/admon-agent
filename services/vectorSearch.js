@@ -23,6 +23,11 @@ import 'dotenv/config';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
+// Log successful connection
+pool.on('connect', () => {
+  console.info('✅ LangChain DB connection established using external DATABASE_URL');
+});
+
 function buildContext(memory) {
   let ctx = '';
   if (memory.firstName) ctx += ` לקוח בשם ${memory.firstName}.`;

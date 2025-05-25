@@ -5,13 +5,14 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import pg from 'pg';
 import 'dotenv/config';
 
-// Initialize PostgreSQL pool
-const pool = new pg.Pool({
-  user: process.env.PGUSER,
-  host: process.env.PGHOST,
-  database: process.env.PGDATABASE,
-  password: process.env.PGPASSWORD,
-  port: process.env.PGPORT
+// Initialize PostgreSQL pool - prioritize DATABASE_URL for external connections
+const pool = new pg.Pool({ 
+  connectionString: process.env.DATABASE_URL 
+});
+
+// Log successful connection
+pool.on('connect', () => {
+  console.info('✅ LangChain DB connection established using external DATABASE_URL');
 });
 
 // Initialize OpenAI components
@@ -43,14 +44,10 @@ let chain = null;
 // Initialize the RAG chain
 async function initializeChain() {
   try {
-    // Initialize PGVector store
+    // Initialize PGVector store using external DATABASE_URL
     vectorStore = await PGVectorStore.initialize(embeddings, {
       postgresConnectionOptions: {
-        user: process.env.PGUSER,
-        host: process.env.PGHOST,
-        database: process.env.PGDATABASE,
-        password: process.env.PGPASSWORD,
-        port: process.env.PGPORT
+        connectionString: process.env.DATABASE_URL
       },
       tableName: 'insurance_qa',
       columns: {
