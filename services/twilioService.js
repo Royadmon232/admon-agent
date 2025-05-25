@@ -22,7 +22,12 @@ if (accountSid && authToken) {
 const queue = new PQueue({ concurrency: 5 });
 
 // === Delivery Log Setup ===
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new pg.Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 
 // Ensure delivery_log table exists
 (async () => {
@@ -36,6 +41,7 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
       ts TIMESTAMPTZ DEFAULT now()
     );`);
     console.log('[twilioService] ✅ delivery_log table ready');
+    console.info('✅ TwilioService connected to DB with SSL');
   } catch (err) {
     console.error('[twilioService] ⚠️  Failed to ensure delivery_log table:', err.message);
   }

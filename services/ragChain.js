@@ -7,12 +7,15 @@ import 'dotenv/config';
 
 // Initialize PostgreSQL pool - prioritize DATABASE_URL for external connections
 const pool = new pg.Pool({ 
-  connectionString: process.env.DATABASE_URL 
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 // Log successful connection
 pool.on('connect', () => {
-  console.info('✅ LangChain DB connection established using external DATABASE_URL');
+  console.info('✅ LangChain DB connection established using external DATABASE_URL with SSL');
 });
 
 // Initialize OpenAI components
@@ -47,7 +50,10 @@ async function initializeChain() {
     // Initialize PGVector store using external DATABASE_URL
     vectorStore = await PGVectorStore.initialize(embeddings, {
       postgresConnectionOptions: {
-        connectionString: process.env.DATABASE_URL
+        connectionString: process.env.DATABASE_URL,
+        ssl: {
+          rejectUnauthorized: false
+        }
       },
       tableName: 'insurance_qa',
       columns: {
