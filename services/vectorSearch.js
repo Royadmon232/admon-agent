@@ -23,8 +23,18 @@ import 'dotenv/config';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 
-export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.60) {
-  const emb = await getEmbedding(normalize(userQuestion));
+function buildContext(memory) {
+  let ctx = '';
+  if (memory.firstName) ctx += ` לקוח בשם ${memory.firstName}.`;
+  if (memory.city) ctx += ` גר בעיר ${memory.city}.`;
+  if (memory.homeValue) ctx += ` ערך דירתו ${memory.homeValue}₪.`;
+  return ctx;
+}
+
+export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.60, memory = {}) {
+  const context = buildContext(memory);
+  console.info("[Context built]:", context);
+  const emb = await getEmbedding(normalize(userQuestion + context));
   try {
     const { rows } = await pool.query(
       `SELECT question, answer, 1 - (embedding <=> $1) AS score
