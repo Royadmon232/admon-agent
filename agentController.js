@@ -3,6 +3,7 @@ import axios from 'axios';
 import { lookupRelevantQAs } from './services/vectorSearch.js';
 import { recall, remember, updateCustomer } from "./services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "./services/salesTemplates.js";
+import { smartAnswer } from "./services/ragChain.js";
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.78;
@@ -104,14 +105,25 @@ export async function handleMessage(phone, userMsg) {
 
     // Get memory and detect intent
     const memory = await recall(phone);
+    console.info("[Memory Loaded]:", memory);
     const intent = intentDetect(userMsg);
+    console.info("[Intent Detected]:", intent);
     
     // Get response from RAG or sales
-    const ragAns = await semanticLookup(userMsg, memory);
-    const reply = ragAns || buildSalesResponse(intent, memory);
+    const ragAns = await smartAnswer(userMsg, memory) || await semanticLookup(userMsg, memory);
+    console.info("[LangChain RAG used]:", !!ragAns);
+    let reply = ragAns;
+    if (!ragAns) {
+      if (intent === 'lead_gen') reply = buildSalesResponse('lead_gen', memory);
+      else if (intent === 'price_pushback') reply = buildSalesResponse('objection', memory);
+      else if (intent === 'close') reply = buildSalesResponse('close', memory);
+      else reply = buildSalesResponse('default', memory);
+      console.info("[Sales fallback triggered]:", reply);
+    }
 
     // Remember the message
     await remember(phone, 'lastMsg', userMsg);
+    console.info("[Memory Updated] lastMsg saved:", userMsg);
 
     // Send response via WhatsApp
     await sendWhatsAppMessage(phone, reply);
