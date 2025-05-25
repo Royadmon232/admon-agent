@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
 import axios from 'axios';
 import { lookupRelevantQAs } from './services/vectorSearch.js';
+import { recall, remember, updateCustomer } from "./services/memoryService.js";
+import { buildSalesResponse, intentDetect } from "./services/salesTemplates.js";
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.78;
@@ -21,7 +23,7 @@ try {
 }
 
 // GPT-4o based semantic question answering
-export async function semanticLookup(userMsg) {
+export async function semanticLookup(userMsg, memory = {}) {
   if (!process.env.OPENAI_API_KEY) {
     console.error("❌ OpenAI API key not found in environment variables");
     return "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
@@ -65,28 +67,6 @@ export async function semanticLookup(userMsg) {
   }
   // RAG-TRACE END
 
-  // Commenting out the old knowledge base loading as it's now handled by RAG
-  /*
-  if (KNOWLEDGE.length === 0) {
-    console.error("❌ Knowledge base is empty");
-    return "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
-  }
-
-  const systemPrompt = `אתה סוכן ביטוח דירות מקצועי ואדיב. תפקידך לענות על שאלות בנושא ביטוח דירה בצורה מקצועית, ידידותית ומקיפה.
-\nכל תשובה שלך חייבת:
-1. להיות בעברית תקינה ומקצועית
-2. להיות מנוסחת בצורה ידידותית ומכבדת
-3. להתייחס ישירות לשאלה שנשאלה
-4. לכלול את כל המידע הרלוונטי והחשוב
-5. להיות מדויקת מבחינה מקצועית
-\nיש לך גישה לרשימת שאלות ותשובות שכיחות. עליך:
-1. לנסות למצוא את התשובה המתאימה ביותר מהרשימה, לפי משמעות השאלה (לא לפי מילים זהות)
-2. אם אין תשובה מתאימה ברשימה, עליך לענות בעצמך בצורה מקצועית ועניינית
-3. לוודא שהתשובה שלמה ומכסה את כל ההיבטים החשובים של השאלה
-\nהנה רשימת השאלות והתשובות:
-${KNOWLEDGE.map(qa => `שאלה: ${qa.question}\nתשובה: ${qa.answer}\n`).join('\n')}`;
-  */
-
   try {
     const response = await axios.post(
       "https://api.openai.com/v1/chat/completions",
@@ -110,6 +90,38 @@ ${KNOWLEDGE.map(qa => `שאלה: ${qa.question}\nתשובה: ${qa.answer}\n`).jo
   } catch (error) {
     console.error("Error calling GPT-4o:", error.response?.data || error.message);
     return "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
+  }
+}
+
+// Main message handler
+export async function handleMessage(phone, userMsg) {
+  try {
+    // Extract name if present
+    if (/^(?:אני|שמי)\s+([^\s]+)/i.test(userMsg)) {
+      const name = RegExp.$1;
+      await updateCustomer(phone, { first_name: name });
+    }
+
+    // Get memory and detect intent
+    const memory = await recall(phone);
+    const intent = intentDetect(userMsg);
+    
+    // Get response from RAG or sales
+    const ragAns = await semanticLookup(userMsg, memory);
+    const reply = ragAns || buildSalesResponse(intent, memory);
+
+    // Remember the message
+    await remember(phone, 'lastMsg', userMsg);
+
+    // Send response via WhatsApp
+    await sendWhatsAppMessage(phone, reply);
+    
+    return reply;
+  } catch (error) {
+    console.error("Error handling message:", error);
+    const errorMsg = "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
+    await sendWhatsAppMessage(phone, errorMsg);
+    return errorMsg;
   }
 }
 

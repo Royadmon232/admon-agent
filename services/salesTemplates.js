@@ -1,4 +1,4 @@
-import templates from "../marketing_templates.json" assert { type: "json" };
+import templates from "../marketing_templates.json" with { type: "json" };
 
 /**
  * Detects user intent based on Hebrew text patterns
