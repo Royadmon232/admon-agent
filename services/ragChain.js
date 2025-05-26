@@ -33,23 +33,18 @@ const llm = new ChatOpenAI({
 });
 
 // Custom prompt template for Hebrew insurance responses
-const template = `
+const prompt = new PromptTemplate({
+  template: `
 אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. דבר בעברית בגוף ראשון.
-
 הקשר: {context}
-
 שאלה: {question}
 
-תן תשובה מקצועית, ידידותית ומקיפה בעברית. התייחס ישירות לשאלה וכלול את כל המידע הרלוונטי.
-`;
+תן תשובה מקצועית, ידידותית ומקיפה בעברית. התייחס לשאלה וכולל את כל המידע הרלוונטי.
+`,
+  inputVariables: ['context', 'question']
+});
 
-if (typeof template !== 'string') {
-  console.error("❌ Invalid prompt template — expected string but got:", typeof template);
-  throw new Error("LangChain RAG initialization failed: template must be a string.");
-}
-
-const qaPrompt = PromptTemplate.fromTemplate(template);
-console.info("✅ LangChain prompt template loaded successfully");
+console.info("✅ LangChain PromptTemplate initialized with Hebrew insurance context");
 
 let vectorStore = null;
 let chain = null;
@@ -82,7 +77,7 @@ async function initializeChain() {
         searchType: 'similarity'
       }),
       {
-        qaTemplate: qaPrompt,
+        qaTemplate: prompt,
         returnSourceDocuments: true
       }
     );
