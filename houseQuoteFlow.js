@@ -104,36 +104,49 @@ export async function startHouseQuoteFlow(phone, userMsg) {
     console.info(`[Quote Flow] Current stage: ${currentStage} for ${phone}`);
     
     // Process based on current stage
+    let response;
     switch (currentStage) {
       case QUOTE_STAGES.ID_NUMBER:
-        return await handleIdNumber(phone, userMsg);
+        response = await handleIdNumber(phone, userMsg);
+        break;
         
       case QUOTE_STAGES.START_DATE:
-        return await handleStartDate(phone, userMsg);
+        response = await handleStartDate(phone, userMsg);
+        break;
         
       case QUOTE_STAGES.COVERAGE_TYPE:
-        return await handleCoverageType(phone, userMsg);
+        response = await handleCoverageType(phone, userMsg);
+        break;
         
       case QUOTE_STAGES.PROPERTY_TYPE:
-        return await handlePropertyType(phone, userMsg);
+        response = await handlePropertyType(phone, userMsg);
+        break;
         
       case QUOTE_STAGES.SETTLEMENT:
-        return await handleSettlement(phone, userMsg);
+        response = await handleSettlement(phone, userMsg);
+        break;
         
       case QUOTE_STAGES.STREET:
-        return await handleStreet(phone, userMsg);
+        response = await handleStreet(phone, userMsg);
+        break;
         
       case QUOTE_STAGES.HOUSE_NUMBER:
-        return await handleHouseNumber(phone, userMsg);
+        response = await handleHouseNumber(phone, userMsg);
+        break;
         
       case QUOTE_STAGES.POSTAL_CODE:
-        return await handlePostalCode(phone, userMsg);
+        response = await handlePostalCode(phone, userMsg);
+        break;
         
       default:
         // Start from the beginning
         await remember(phone, 'quoteStage', QUOTE_STAGES.ID_NUMBER);
-        return await askIdNumber(phone);
+        response = await askIdNumber(phone);
     }
+    
+    // Ensure we always return a response
+    return response || "מצטער, אירעה שגיאה בתהליך הצעת המחיר. אנא נסה שוב.";
+    
   } catch (error) {
     console.error('[Quote Flow] Error:', error);
     return "מצטער, אירעה שגיאה בתהליך הצעת המחיר. אנא נסה שוב.";
