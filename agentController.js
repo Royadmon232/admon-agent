@@ -5,7 +5,7 @@ import { recall, remember, updateCustomer } from "./services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "./services/salesTemplates.js";
 import { smartAnswer } from "./services/ragChain.js";
 import { startHouseQuoteFlow } from "./houseQuoteFlow.js";
-import { sendWapp } from "./utils/send.js";
+import { sendWapp } from './services/twilioService.js';
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.78;
@@ -253,80 +253,38 @@ function detectConfirmation(userMsg) {
 
 // WhatsApp message sending function
 export async function sendWhatsAppMessage(to, message) {
-  if (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
-    console.error("❌ WhatsApp API configuration missing");
-    return;
-  }
-
   try {
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
-      { 
-        messaging_product: "whatsapp", 
-        to: to, 
-        text: { body: message } 
-      },
-      { 
-        headers: { 
-          Authorization: `Bearer ${process.env.WHATSAPP_API_TOKEN}`, 
-          "Content-Type": "application/json" 
-        } 
-      }
-    );
+    const result = await sendWapp(to, message);
+    if (!result.success) {
+      console.error("Error sending WhatsApp message:", result.error);
+      throw new Error(result.error);
+    }
   } catch (error) {
-    console.error("Error sending WhatsApp message:", error.response?.data || error.message);
+    console.error("Error sending WhatsApp message:", error);
     throw error;
   }
 }
 
 // WhatsApp message sending function with quick reply button
 export async function sendWhatsAppMessageWithButton(to, message, buttonTitle, buttonPayload) {
-  if (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
-    console.error("❌ WhatsApp API configuration missing");
-    return;
-  }
-
   try {
-    const payload = {
-      messaging_product: "whatsapp",
-      to: to,
-      type: "interactive",
-      interactive: {
-        type: "button",
-        body: {
-          text: message
-        },
-        action: {
-          buttons: [
-            {
-              type: "reply",
-              reply: {
-                id: buttonPayload,
-                title: buttonTitle
-              }
-            }
-          ]
-        }
-      }
-    };
-
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
-      payload,
-      { 
-        headers: { 
-          Authorization: `Bearer ${process.env.WHATSAPP_API_TOKEN}`, 
-          "Content-Type": "application/json" 
-        } 
-      }
-    );
+    // Format message with button as text since Twilio doesn't support interactive buttons
+    const formattedMessage = `${message}\n\n[${buttonTitle}]`;
+    const result = await sendWapp(to, formattedMessage);
     
-    console.log(`✅ Sent WhatsApp message with button to ${to}`);
+    if (result.success) {
+      console.log(`✅ Sent WhatsApp message with button to ${to}`);
+    } else {
+      console.error("Error sending WhatsApp message with button:", result.error);
+      // Fallback to regular message
+      console.log("🔄 Falling back to regular message...");
+      await sendWapp(to, `${message}\n\n[${buttonTitle}]`);
+    }
   } catch (error) {
-    console.error("Error sending WhatsApp message with button:", error.response?.data || error.message);
-    // Fallback to regular message if button fails
+    console.error("Error sending WhatsApp message with button:", error);
+    // Fallback to regular message
     console.log("🔄 Falling back to regular message...");
-    await sendWhatsAppMessage(to, `${message}\n\n[${buttonTitle}]`);
+    await sendWapp(to, `${message}\n\n[${buttonTitle}]`);
   }
 }
 

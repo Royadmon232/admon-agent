@@ -2,52 +2,30 @@ import { remember, recall } from "./services/memoryService.js";
 import { sendWhatsAppMessage, sendWhatsAppMessageWithButton } from "./agentController.js";
 import axios from 'axios';
 import { sendQuoteStep } from "./sendQuoteStep.js";
+import { sendWapp } from './services/twilioService.js';
 
 // WhatsApp List Message function
 async function sendWhatsAppListMessage(to, headerText, bodyText, buttonText, sections) {
-  if (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
-    console.error("❌ WhatsApp API configuration missing");
-    return;
-  }
-
   try {
-    const payload = {
-      messaging_product: "whatsapp",
-      to: to,
-      type: "interactive",
-      interactive: {
-        type: "list",
-        header: {
-          type: "text",
-          text: headerText
-        },
-        body: {
-          text: bodyText
-        },
-        action: {
-          button: buttonText,
-          sections: sections
-        }
-      }
-    };
-
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
-      payload,
-      { 
-        headers: { 
-          Authorization: `Bearer ${process.env.WHATSAPP_API_TOKEN}`, 
-          "Content-Type": "application/json" 
-        } 
-      }
-    );
+    // Format the message for Twilio
+    const messageText = `${headerText}\n\n${bodyText}\n\n${sections[0].rows.map((row, index) => `${index + 1}. ${row.title}`).join('\n')}`;
     
-    console.log(`✅ Sent WhatsApp list message to ${to}`);
+    // Send via Twilio
+    const result = await sendWapp(to, messageText);
+    
+    if (result.success) {
+      console.log(`✅ Sent WhatsApp list message to ${to}`);
+    } else {
+      console.error("Error sending WhatsApp list message:", result.error);
+      // Fallback to regular message with numbered options
+      const fallbackText = `${headerText}\n\n${bodyText}\n\n${sections[0].rows.map((row, index) => `${index + 1}. ${row.title}`).join('\n')}`;
+      await sendWapp(to, fallbackText);
+    }
   } catch (error) {
-    console.error("Error sending WhatsApp list message:", error.response?.data || error.message);
+    console.error("Error sending WhatsApp list message:", error);
     // Fallback to regular message with numbered options
     const fallbackText = `${headerText}\n\n${bodyText}\n\n${sections[0].rows.map((row, index) => `${index + 1}. ${row.title}`).join('\n')}`;
-    await sendWhatsAppMessage(to, fallbackText);
+    await sendWapp(to, fallbackText);
   }
 }
 

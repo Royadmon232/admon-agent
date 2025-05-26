@@ -17,18 +17,18 @@ const QUOTE_STAGES = {
  * Sends an interactive WhatsApp message based on the current quote stage
  * @param {string} phone - User's phone number
  * @param {string} stage - Current quote stage
- * @returns {Promise<object>} - WhatsApp-compatible JSON object for Twilio
+ * @returns {Promise<string>} - Response message
  */
 export async function sendQuoteStep(phone, stage) {
   switch (stage) {
     case QUOTE_STAGES.COVERAGE_TYPE:
-      return sendCoverageTypeButtons(phone);
+      return await sendCoverageTypeButtons(phone);
       
     case QUOTE_STAGES.PROPERTY_TYPE:
-      return sendPropertyTypeButtons(phone);
+      return await sendPropertyTypeButtons(phone);
       
     case QUOTE_STAGES.SETTLEMENT:
-      return sendSettlementList(phone);
+      return await sendSettlementList(phone);
       
     default:
       throw new Error(`Unsupported quote stage: ${stage}`);
@@ -38,143 +38,83 @@ export async function sendQuoteStep(phone, stage) {
 /**
  * Sends interactive buttons for coverage type selection
  */
-function sendCoverageTypeButtons(phone) {
-  return {
-    messaging_product: "whatsapp",
-    to: phone,
-    type: "interactive",
-    interactive: {
-      type: "button",
-      body: {
-        text: "📦 *איזה סוג כיסוי אתה מחפש?*\n\nבחר את סוג הכיסוי המתאים עבורך:"
-      },
-      action: {
-        buttons: [
-          {
-            type: "reply",
-            reply: {
-              id: "coverage_structure_only",
-              title: "מבנה בלבד"
-            }
-          },
-          {
-            type: "reply",
-            reply: {
-              id: "coverage_contents_only",
-              title: "תכולה בלבד"
-            }
-          },
-          {
-            type: "reply",
-            reply: {
-              id: "coverage_structure_and_contents",
-              title: "מבנה ותכולה"
-            }
-          }
-        ]
-      }
-    }
-  };
+async function sendCoverageTypeButtons(phone) {
+  const message = `📦 *איזה סוג כיסוי אתה מחפש?*
+
+בחר את סוג הכיסוי המתאים עבורך:
+
+1. מבנה בלבד
+2. תכולה בלבד
+3. מבנה ותכולה
+4. מבנה בלבד משועבד
+
+הקלד את המספר המתאים או את שם האפשרות.`;
+  
+  await sendWapp(phone, message);
+  return message;
 }
 
 /**
  * Sends interactive buttons for property type selection
  */
-function sendPropertyTypeButtons(phone) {
-  return {
-    messaging_product: "whatsapp",
-    to: phone,
-    type: "interactive",
-    interactive: {
-      type: "button",
-      body: {
-        text: "🏠 *מה סוג הנכס שלך?*\n\nבחר את סוג הנכס המתאים:"
-      },
-      action: {
-        buttons: [
-          {
-            type: "reply",
-            reply: {
-              id: "property_private",
-              title: "בית פרטי"
-            }
-          },
-          {
-            type: "reply",
-            reply: {
-              id: "property_ground_floor",
-              title: "משותף קומת קרקע"
-            }
-          },
-          {
-            type: "reply",
-            reply: {
-              id: "property_first_buyer",
-              title: "משותף קונה ראשונה"
-            }
-          },
-          {
-            type: "reply",
-            reply: {
-              id: "property_middle_floor",
-              title: "משותף קומת ביניים"
-            }
-          },
-          {
-            type: "reply",
-            reply: {
-              id: "property_top_floor",
-              title: "משותף קומה אחרונה"
-            }
-          }
-        ]
-      }
-    }
-  };
+async function sendPropertyTypeButtons(phone) {
+  const message = `🏠 *מה סוג הנכס שלך?*
+
+בחר את סוג הנכס המתאים:
+
+1. בית פרטי
+2. משותף קומת קרקע
+3. משותף קונה ראשונה
+4. משותף קומת ביניים
+5. משותף קומה אחרונה
+
+הקלד את המספר המתאים או את שם האפשרות.`;
+  
+  await sendWapp(phone, message);
+  return message;
 }
 
 /**
  * Sends an interactive list message for settlement selection
  */
-function sendSettlementList(phone) {
-  return {
-    messaging_product: "whatsapp",
-    to: phone,
-    type: "interactive",
-    interactive: {
-      type: "list",
-      header: {
-        type: "text",
-        text: "📍 *באיזה יישוב נמצא הנכס?*"
-      },
-      body: {
-        text: "בחר את היישוב מהרשימה או הזן יישוב אחר:"
-      },
-      action: {
-        button: "בחר יישוב",
-        sections: [
-          {
-            title: "יישובים נפוצים",
-            rows: [
-              {
-                id: "settlement_tel_aviv",
-                title: "תל אביב",
-                description: "תל אביב - יפו"
-              },
-              {
-                id: "settlement_jerusalem",
-                title: "ירושלים",
-                description: "בירת ישראל"
-              },
-              {
-                id: "settlement_haifa",
-                title: "חיפה",
-                description: "עיר הכרמל"
-              }
-            ]
-          }
-        ]
-      }
-    }
-  };
+async function sendSettlementList(phone) {
+  const message = `📍 *באיזה יישוב נמצא הנכס?*
+
+בחר את היישוב מהרשימה או הזן יישוב אחר:
+
+1. תל אביב - תל אביב - יפו
+2. ירושלים - בירת ישראל
+3. חיפה - עיר הכרמל
+
+הקלד את המספר המתאים או את שם היישוב.`;
+  
+  await sendWapp(phone, message);
+  return message;
+}
+
+if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
+  console.info('[Quote Flow] User is in quote flow stage:', memory.quoteStage);
+  const quoteResponse = await startHouseQuoteFlow(phone, userMsg);
+  await sendWapp(phone, quoteResponse);
+  return 'Quote form sent successfully via WhatsApp.';
 } 
+
+const isQuoteRequest = quotePatterns.some(pattern => {
+  const matches = pattern.test(normalizedMsg);
+  if (matches) {
+    console.info(`[Quote Flow] Quote pattern matched: ${pattern} for message: "${normalizedMsg}"`);
+  }
+  return matches;
+}); 
+
+const isConfirmation = detectConfirmation(normalizedMsg);
+if (memory.awaitingQuoteConfirmation && isConfirmation) {
+  // User confirmed, clear the flag and start quote form
+  await remember(phone, 'awaitingQuoteConfirmation', null);
+  await remember(phone, 'quoteStage', 'id_number');
+  // ...
+} 
+
+const answer = await smartAnswer(normalizedMsg, memory) 
+  || await semanticLookup(normalizedMsg, memory)
+  || await salesFallback(normalizedMsg, memory); 
