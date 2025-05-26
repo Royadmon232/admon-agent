@@ -5,6 +5,7 @@ import { recall, remember, updateCustomer } from "./services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "./services/salesTemplates.js";
 import { smartAnswer } from "./services/ragChain.js";
 import { startHouseQuoteFlow } from "./houseQuoteFlow.js";
+import { sendWapp } from "./utils/send.js";
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.78;
@@ -108,7 +109,8 @@ export async function handleMessage(phone, userMsg) {
     if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
       console.info('[Quote Flow] User is in quote flow stage:', memory.quoteStage);
       const quoteResponse = await startHouseQuoteFlow(phone, userMsg);
-      return quoteResponse;
+      await sendWapp(phone, quoteResponse);
+      return 'Quote form sent successfully via WhatsApp.';
     }
     
     // Check for quote request at the very top
@@ -147,7 +149,8 @@ export async function handleMessage(phone, userMsg) {
       console.info("[Quote Flow] Quote request detected, starting quote flow immediately");
       const quoteResponse = await startHouseQuoteFlow(phone, normalizedMsg);
       console.info("[Quote Flow] Quote flow response:", quoteResponse);
-      return quoteResponse;
+      await sendWapp(phone, quoteResponse);
+      return 'Quote form sent successfully via WhatsApp.';
     }
     
     // Extract name if present
@@ -168,7 +171,8 @@ export async function handleMessage(phone, userMsg) {
       
       // Start the house quote flow
       const quoteResponse = await startHouseQuoteFlow(phone, "");
-      return quoteResponse;
+      await sendWapp(phone, quoteResponse);
+      return 'Quote form sent successfully via WhatsApp.';
     }
     
     // If we get here, handle with RAG/GPT
