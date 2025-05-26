@@ -115,8 +115,25 @@ export async function handleMessage(phone, userMsg) {
       return quoteResponse;
     }
     
-    // Check for quote confirmation flow
-    const isQuoteRequest = detectQuoteIntent(userMsg);
+    // Check for quote request before RAG lookup
+    const quotePatterns = [
+      /אני רוצה הצעת מחיר/i,
+      /כמה עולה ביטוח דירה/i,
+      /מעוניין לבטח את הדירה/i,
+      /טופס ביטוח/i,
+      /הצעת מחיר/i,
+      /כמה עולה/i,
+      /מחיר.*ביטוח/i,
+      /ביטוח.*מחיר/i,
+      /רוצה.*הצעה/i,
+      /מעוניין.*הצעה/i,
+      /מה המחיר/i,
+      /כמה זה עולה/i,
+      /רוצה לבטח/i,
+      /מעוניין בביטוח/i
+    ];
+    
+    const isQuoteRequest = quotePatterns.some(pattern => pattern.test(userMsg));
     const isConfirmation = detectConfirmation(userMsg);
     
     // Handle quote confirmation flow
@@ -181,8 +198,8 @@ function detectQuoteIntent(userMsg) {
   const quotePatterns = [
     /אני רוצה הצעת מחיר/i,
     /כמה עולה ביטוח דירה/i,
-    /שלח לי טופס ביטוח/i,
     /מעוניין לבטח את הדירה/i,
+    /טופס ביטוח/i,
     /הצעת מחיר/i,
     /כמה עולה/i,
     /מחיר.*ביטוח/i,
@@ -191,7 +208,6 @@ function detectQuoteIntent(userMsg) {
     /מעוניין.*הצעה/i,
     /מה המחיר/i,
     /כמה זה עולה/i,
-    /טופס.*ביטוח/i,
     /רוצה לבטח/i,
     /מעוניין בביטוח/i
   ];
