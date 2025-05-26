@@ -82,7 +82,7 @@ async function initializeChain() {
         searchType: 'similarity'
       }),
       {
-        qaTemplate: prompt,
+        prompt,
         returnSourceDocuments: true
       }
     );
