@@ -1,6 +1,7 @@
 import { remember, recall } from "./services/memoryService.js";
 import { sendWhatsAppMessage, sendWhatsAppMessageWithButton } from "./agentController.js";
 import axios from 'axios';
+import { sendQuoteStep } from "./sendQuoteStep.js";
 
 // WhatsApp List Message function
 async function sendWhatsAppListMessage(to, headerText, bodyText, buttonText, sections) {
@@ -88,68 +89,70 @@ const PROPERTY_OPTIONS = {
  */
 export async function startHouseQuoteFlow(phone, userMsg) {
   try {
-    // Get current memory/session data
     const memory = await recall(phone);
+    console.info("[Quote Flow] Starting quote flow for", phone, "with message:", userMsg);
     
-    // Send initial message if starting new quote flow
-    if (!memory.quoteStage || memory.quoteStage === QUOTE_STAGES.ID_NUMBER) {
-      const message = "מה מספר תעודת הזהות שלך?";
-      await sendWhatsAppMessage(phone, message);
-      await remember(phone, { quoteStage: QUOTE_STAGES.ID_NUMBER });
-      return message; // Return message to prevent GPT fallback
+    // If this is a new quote request, start with coverage type
+    if (!memory.quoteStage) {
+      console.info("[Quote Flow] New quote request, starting with coverage type");
+      await remember(phone, 'quoteStage', QUOTE_STAGES.COVERAGE_TYPE);
+      return await sendQuoteStep(phone, QUOTE_STAGES.COVERAGE_TYPE);
     }
     
-    const currentStage = memory.quoteStage || QUOTE_STAGES.ID_NUMBER;
-    
-    console.info(`[Quote Flow] Current stage: ${currentStage} for ${phone}`);
-    
-    // Process based on current stage
-    let response;
-    switch (currentStage) {
-      case QUOTE_STAGES.ID_NUMBER:
-        response = await handleIdNumber(phone, userMsg);
-        break;
-        
-      case QUOTE_STAGES.START_DATE:
-        response = await handleStartDate(phone, userMsg);
-        break;
-        
+    // Handle existing quote flow based on current stage
+    switch (memory.quoteStage) {
       case QUOTE_STAGES.COVERAGE_TYPE:
-        response = await handleCoverageType(phone, userMsg);
-        break;
+        // Store coverage type and move to property type
+        await remember(phone, 'coverageType', userMsg);
+        await remember(phone, 'quoteStage', QUOTE_STAGES.PROPERTY_TYPE);
+        return await sendQuoteStep(phone, QUOTE_STAGES.PROPERTY_TYPE);
         
       case QUOTE_STAGES.PROPERTY_TYPE:
-        response = await handlePropertyType(phone, userMsg);
-        break;
+        // Store property type and move to settlement
+        await remember(phone, 'propertyType', userMsg);
+        await remember(phone, 'quoteStage', QUOTE_STAGES.SETTLEMENT);
+        return await sendQuoteStep(phone, QUOTE_STAGES.SETTLEMENT);
         
       case QUOTE_STAGES.SETTLEMENT:
-        response = await handleSettlement(phone, userMsg);
-        break;
+        // Store settlement and move to street
+        await remember(phone, 'settlement', userMsg);
+        await remember(phone, 'quoteStage', QUOTE_STAGES.STREET);
+        return await sendWhatsAppMessage(phone, "📝 *מה שם הרחוב?*\n\nהזן את שם הרחוב של הנכס:");
         
       case QUOTE_STAGES.STREET:
-        response = await handleStreet(phone, userMsg);
-        break;
+        // Store street and move to house number
+        await remember(phone, 'street', userMsg);
+        await remember(phone, 'quoteStage', QUOTE_STAGES.HOUSE_NUMBER);
+        return await sendWhatsAppMessage(phone, "🏠 *מה מספר הבית?*\n\nהזן את מספר הבית:");
         
       case QUOTE_STAGES.HOUSE_NUMBER:
-        response = await handleHouseNumber(phone, userMsg);
-        break;
+        // Store house number and move to postal code
+        await remember(phone, 'houseNumber', userMsg);
+        await remember(phone, 'quoteStage', QUOTE_STAGES.POSTAL_CODE);
+        return await sendWhatsAppMessage(phone, "📮 *מה המיקוד?*\n\nהזן את מספר המיקוד של הנכס:");
         
       case QUOTE_STAGES.POSTAL_CODE:
-        response = await handlePostalCode(phone, userMsg);
-        break;
+        // Store postal code and complete the flow
+        await remember(phone, 'postalCode', userMsg);
+        await remember(phone, 'quoteStage', QUOTE_STAGES.COMPLETED);
+        
+        // Send completion message
+        const completionMsg = `✅ *תודה על המידע!*\n\nאני אכין עבורך הצעת מחיר מותאמת אישית בהתבסס על המידע שסיפקת:\n\n` +
+          `📦 *סוג כיסוי:* ${memory.coverageType}\n` +
+          `🏠 *סוג נכס:* ${memory.propertyType}\n` +
+          `📍 *מיקום:* ${memory.settlement}, ${memory.street} ${memory.houseNumber}\n` +
+          `📮 *מיקוד:* ${memory.postalCode}\n\n` +
+          `אני אשלח לך את ההצעה בקרוב.`;
+        
+        return await sendWhatsAppMessage(phone, completionMsg);
         
       default:
-        // Start from the beginning
-        await remember(phone, 'quoteStage', QUOTE_STAGES.ID_NUMBER);
-        response = await askIdNumber(phone);
+        console.error("[Quote Flow] Unknown quote stage:", memory.quoteStage);
+        return await sendWhatsAppMessage(phone, "מצטער, אירעה שגיאה בתהליך. אנא התחל מחדש.");
     }
-    
-    // Ensure we always return a response
-    return response || "מצטער, אירעה שגיאה בתהליך הצעת המחיר. אנא נסה שוב.";
-    
   } catch (error) {
-    console.error('[Quote Flow] Error:', error);
-    return "מצטער, אירעה שגיאה בתהליך הצעת המחיר. אנא נסה שוב.";
+    console.error("[Quote Flow] Error in quote flow:", error);
+    return await sendWhatsAppMessage(phone, "מצטער, אירעה שגיאה בתהליך. אנא נסה שוב מאוחר יותר.");
   }
 }
 
