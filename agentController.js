@@ -114,6 +114,9 @@ export async function handleMessage(phone, userMsg) {
     // Check for quote request at the very top
     const quotePatterns = [
       /אני רוצה הצעת מחיר/i,
+      /תן לי הצעת מחיר/i,
+      /הצעת מחיר לביטוח/i,
+      /ביטוח דירה/i,
       /מעוניין בביטוח דירה/i,
       /שלח לי טופס ביטוח/i,
       /רוצה לבטח את הדירה/i,
