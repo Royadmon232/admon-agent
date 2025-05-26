@@ -4,7 +4,6 @@ import { lookupRelevantQAs } from './services/vectorSearch.js';
 import { recall, remember, updateCustomer } from "./services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "./services/salesTemplates.js";
 import { smartAnswer } from "./services/ragChain.js";
-import { startHouseQuoteFlow } from "./houseQuoteFlow.js";
 import { sendWapp } from './services/twilioService.js';
 
 const EMB_MODEL = "text-embedding-3-small";
@@ -107,67 +106,16 @@ export async function handleMessage(phone, userMsg) {
     // Get memory state
     const memory = await recall(phone);
     
-    // Check if user is in quote flow
-    if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
-      console.info('[Quote Flow] User is in quote flow stage:', memory.quoteStage);
-      const quoteResponse = await startHouseQuoteFlow(phone, userMsg);
-      await sendWapp(phone, quoteResponse);
-      return 'Quote form sent successfully via WhatsApp.';
-    }
-    
-    // Refined quote request patterns
-    const quotePatterns = [
-      /אני רוצה הצעת מחיר/i,
-      /שלח לי הצעה/i,
-      /תן לי הצעת מחיר/i,
-      /הצעת מחיר לביטוח/i,
-      /שלח לי טופס ביטוח/i
-    ];
-    
-    // Check for quote request
-    const isQuoteRequest = quotePatterns.some(pattern => {
-      const matches = pattern.test(normalizedMsg);
-      if (matches) {
-        console.info(`[Quote Flow] Quote pattern matched: ${pattern} for message: "${normalizedMsg}"`);
-      }
-      return matches;
-    });
-    
-    // If it's a quote request, handle it immediately and return
-    if (isQuoteRequest) {
-      console.info("[Quote Flow] Quote request detected, starting quote flow immediately");
-      const quoteResponse = await startHouseQuoteFlow(phone, normalizedMsg);
-      console.info("[Quote Flow] Quote flow response:", quoteResponse);
-      await sendWapp(phone, quoteResponse);
-      return 'Quote form sent successfully via WhatsApp.';
-    }
-    
     // Extract name if present
     if (/^(?:אני|שמי)\s+([^\s]+)/i.test(normalizedMsg)) {
       const name = RegExp.$1;
       await updateCustomer(phone, { first_name: name });
     }
     
-    // Check for quote confirmation flow
-    const isConfirmation = detectConfirmation(normalizedMsg);
-    if (memory.awaitingQuoteConfirmation && isConfirmation) {
-      // User confirmed, clear the flag and start quote form
-      await remember(phone, 'awaitingQuoteConfirmation', null);
-      await remember(phone, 'quoteStage', 'id_number'); // Initialize quote flow
-      
-      const confirmationReply = "✅ *מעולה!*\n\nבואו נתחיל בתהליך הצעת המחיר. אני אשאל אותך כמה שאלות קצרות כדי להכין עבורך הצעה מותאמת אישית.\n\n🚀 *מתחילים עכשיו...*";
-      await sendWhatsAppMessage(phone, confirmationReply);
-      
-      // Start the house quote flow
-      const quoteResponse = await startHouseQuoteFlow(phone, "");
-      await sendWapp(phone, quoteResponse);
-      return 'Quote form sent successfully via WhatsApp.';
-    }
-    
-    // Fallback to RAG/GPT logic for non-quote requests
+    // Ensure RAG + GPT flow remains intact
     const intent = intentDetect(normalizedMsg);
     console.info("[Intent Detected]:", intent);
-    
+
     // Get response from RAG or sales
     const answer = await smartAnswer(normalizedMsg, memory) 
       || await semanticLookup(normalizedMsg, memory)
@@ -196,46 +144,6 @@ async function salesFallback(userMsg, memory) {
   if (intent === 'price_pushback') return buildSalesResponse('objection', memory);
   if (intent === 'close') return buildSalesResponse('close', memory);
   return buildSalesResponse('default', memory);
-}
-
-// Helper function to detect quote intent
-function detectQuoteIntent(userMsg) {
-  const quotePatterns = [
-    /אני רוצה הצעת מחיר/i,
-    /כמה עולה ביטוח דירה/i,
-    /מעוניין לבטח את הדירה/i,
-    /טופס ביטוח/i,
-    /הצעת מחיר/i,
-    /כמה עולה/i,
-    /מחיר.*ביטוח/i,
-    /ביטוח.*מחיר/i,
-    /רוצה.*הצעה/i,
-    /מעוניין.*הצעה/i,
-    /מה המחיר/i,
-    /כמה זה עולה/i,
-    /רוצה לבטח/i,
-    /מעוניין בביטוח/i
-  ];
-  
-  return quotePatterns.some(pattern => pattern.test(userMsg));
-}
-
-// Helper function to detect confirmation
-function detectConfirmation(userMsg) {
-  const confirmationPatterns = [
-    /אני מאשר/i,
-    /מאשר/i,
-    /כן/i,
-    /בסדר/i,
-    /אוקיי/i,
-    /ok/i,
-    /בואו נתחיל/i,
-    /אני מוכן/i,
-    /נעשה את זה/i,
-    /CONFIRM_START_QUOTE/i
-  ];
-  
-  return confirmationPatterns.some(pattern => pattern.test(userMsg));
 }
 
 // WhatsApp message sending function

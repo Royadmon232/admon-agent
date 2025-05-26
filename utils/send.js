@@ -40,13 +40,6 @@ export async function sendWapp(to, body, buttons = []) {
     body: body,
   };
 
-  // Handle interactive messages with buttons
-  if (buttons.length > 0) {
-    // Twilio does not support interactive buttons directly, so we format them as text
-    const buttonText = buttons.map((button, index) => `${index + 1}. ${button.title}`).join('\n');
-    messageData.body += `\n\n${buttonText}`;
-  }
-
   try {
     const message = await sendMessageWithRetryAndQueue(messageData, `WhatsApp to ${to}`);
     console.log(`✅ WhatsApp message sent to ${to}. SID: ${message.sid}`);
