@@ -1,9 +1,11 @@
 import { ConversationalRetrievalQAChain } from 'langchain/chains';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
-import { PromptTemplate } from '@langchain/core/prompts';
+import { PromptTemplate } from 'langchain/prompts';
 import pg from 'pg';
 import 'dotenv/config';
+
+console.info("✅ PromptTemplate loaded correctly");
 
 // Initialize PostgreSQL pool - prioritize DATABASE_URL for external connections
 const pool = new pg.Pool({ 
