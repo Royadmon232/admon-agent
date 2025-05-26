@@ -98,6 +98,11 @@ export async function semanticLookup(userMsg, memory = {}) {
 // Main message handler
 export async function handleMessage(phone, userMsg) {
   try {
+    console.info(`[DEBUG] Processing message: "${userMsg}" from ${phone}`);
+    
+    // Normalize user message for better pattern matching
+    const normalizedMsg = userMsg.trim();
+    
     // Check for quote request at the very top
     const quotePatterns = [
       /אני רוצה הצעת מחיר/i,
@@ -117,14 +122,30 @@ export async function handleMessage(phone, userMsg) {
       /מעוניין בביטוח/i
     ];
     
-    const isQuoteRequest = quotePatterns.some(pattern => pattern.test(userMsg));
+    const isQuoteRequest = quotePatterns.some(pattern => {
+      const matches = pattern.test(normalizedMsg);
+      if (matches) {
+        console.info(`[DEBUG] Quote pattern matched: ${pattern} for message: "${normalizedMsg}"`);
+      }
+      return matches;
+    });
+    
+    console.info(`[DEBUG] isQuoteRequest: ${isQuoteRequest}`);
+    
     if (isQuoteRequest) {
-      console.info("[Quote Flow] Quote request detected, starting quote flow");
-      return await startHouseQuoteFlow(phone, userMsg);
+      console.info("[Quote Flow] Quote request detected, starting quote flow immediately");
+      try {
+        const quoteResponse = await startHouseQuoteFlow(phone, normalizedMsg);
+        console.info("[Quote Flow] Quote flow response:", quoteResponse);
+        return quoteResponse;
+      } catch (error) {
+        console.error("[Quote Flow] Error in startHouseQuoteFlow:", error);
+        throw error;
+      }
     }
 
     // Extract name if present
-    if (/^(?:אני|שמי)\s+([^\s]+)/i.test(userMsg)) {
+    if (/^(?:אני|שמי)\s+([^\s]+)/i.test(normalizedMsg)) {
       const name = RegExp.$1;
       await updateCustomer(phone, { first_name: name });
     }
@@ -136,12 +157,12 @@ export async function handleMessage(phone, userMsg) {
     // Check if user is already in quote flow
     if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
       console.info("[Quote Flow] User is in quote flow, routing to quote handler");
-      const quoteResponse = await startHouseQuoteFlow(phone, userMsg);
+      const quoteResponse = await startHouseQuoteFlow(phone, normalizedMsg);
       return quoteResponse;
     }
     
     // Check for quote confirmation flow
-    const isConfirmation = detectConfirmation(userMsg);
+    const isConfirmation = detectConfirmation(normalizedMsg);
     
     // Handle quote confirmation flow
     if (memory.awaitingQuoteConfirmation && isConfirmation) {
@@ -158,22 +179,13 @@ export async function handleMessage(phone, userMsg) {
       return confirmationReply;
     }
     
-    if (isQuoteRequest && !memory.awaitingQuoteConfirmation) {
-      // User wants a quote but hasn't confirmed yet
-      await remember(phone, 'awaitingQuoteConfirmation', true);
-      
-      const confirmationMsg = "האם אתה מאשר להתחיל תהליך של הצעת מחיר לביטוח דירה?";
-      
-      // Send message with quick reply button
-      await sendWhatsAppMessageWithButton(phone, confirmationMsg, "אני מאשר", "CONFIRM_START_QUOTE");
-      return confirmationMsg;
-    }
+
     
-    const intent = intentDetect(userMsg);
+    const intent = intentDetect(normalizedMsg);
     console.info("[Intent Detected]:", intent);
     
     // Get response from RAG or sales
-    const ragAns = await smartAnswer(userMsg, memory) || await semanticLookup(userMsg, memory);
+    const ragAns = await smartAnswer(normalizedMsg, memory) || await semanticLookup(normalizedMsg, memory);
     console.info("[LangChain RAG used]:", !!ragAns);
     let reply = ragAns;
     if (!ragAns) {
@@ -185,8 +197,8 @@ export async function handleMessage(phone, userMsg) {
     }
 
     // Remember the message
-    await remember(phone, 'lastMsg', userMsg);
-    console.info("[Memory Updated] lastMsg saved:", userMsg);
+    await remember(phone, 'lastMsg', normalizedMsg);
+    console.info("[Memory Updated] lastMsg saved:", normalizedMsg);
 
     // Send response via WhatsApp
     await sendWhatsAppMessage(phone, reply);
