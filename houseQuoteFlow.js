@@ -93,9 +93,10 @@ export async function startHouseQuoteFlow(phone, userMsg) {
     
     // Send initial message if starting new quote flow
     if (!memory.quoteStage || memory.quoteStage === QUOTE_STAGES.ID_NUMBER) {
-      await sendWhatsAppMessage(phone, "מה מספר תעודת הזהות שלך?");
+      const message = "מה מספר תעודת הזהות שלך?";
+      await sendWhatsAppMessage(phone, message);
       await remember(phone, { quoteStage: QUOTE_STAGES.ID_NUMBER });
-      return;
+      return message; // Return the message to prevent fallback to GPT/RAG
     }
     
     const currentStage = memory.quoteStage || QUOTE_STAGES.ID_NUMBER;
