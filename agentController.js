@@ -103,6 +103,14 @@ export async function handleMessage(phone, userMsg) {
     // Normalize user message for better pattern matching
     const normalizedMsg = userMsg.trim();
     
+    // Check if user is in quote flow
+    const memory = await recall(phone);
+    if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
+      console.info('[Quote Flow] User is in quote flow stage:', memory.quoteStage);
+      const quoteResponse = await startHouseQuoteFlow(phone, userMsg);
+      return quoteResponse;
+    }
+    
     // Check for quote request at the very top
     const quotePatterns = [
       /אני רוצה הצעת מחיר/i,
@@ -136,14 +144,6 @@ export async function handleMessage(phone, userMsg) {
       console.info("[Quote Flow] Quote request detected, starting quote flow immediately");
       const quoteResponse = await startHouseQuoteFlow(phone, normalizedMsg);
       console.info("[Quote Flow] Quote flow response:", quoteResponse);
-      return quoteResponse;
-    }
-    
-    // Get memory and check if user is already in quote flow
-    const memory = await recall(phone);
-    if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
-      console.info("[Quote Flow] User is in quote flow, routing to quote handler");
-      const quoteResponse = await startHouseQuoteFlow(phone, normalizedMsg);
       return quoteResponse;
     }
     
