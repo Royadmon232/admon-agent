@@ -104,8 +104,10 @@ export async function handleMessage(phone, userMsg) {
     // Normalize user message for better pattern matching
     const normalizedMsg = userMsg.trim();
     
-    // Check if user is in quote flow
+    // Get memory state
     const memory = await recall(phone);
+    
+    // Check if user is in quote flow
     if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
       console.info('[Quote Flow] User is in quote flow stage:', memory.quoteStage);
       const quoteResponse = await startHouseQuoteFlow(phone, userMsg);
@@ -113,7 +115,7 @@ export async function handleMessage(phone, userMsg) {
       return 'Quote form sent successfully via WhatsApp.';
     }
     
-    // Check for quote request at the very top
+    // Check for quote request patterns
     const quotePatterns = [
       /אני רוצה הצעת מחיר/i,
       /תן לי הצעת מחיר/i,
@@ -135,7 +137,7 @@ export async function handleMessage(phone, userMsg) {
       /מעוניין בביטוח/i
     ];
     
-    // Check for quote request first
+    // Check for quote request
     const isQuoteRequest = quotePatterns.some(pattern => {
       const matches = pattern.test(normalizedMsg);
       if (matches) {
@@ -175,36 +177,38 @@ export async function handleMessage(phone, userMsg) {
       return 'Quote form sent successfully via WhatsApp.';
     }
     
-    // If we get here, handle with RAG/GPT
+    // If we get here and it's not a quote request, handle with RAG/GPT
     const intent = intentDetect(normalizedMsg);
     console.info("[Intent Detected]:", intent);
     
     // Get response from RAG or sales
-    const ragAns = await smartAnswer(normalizedMsg, memory) || await semanticLookup(normalizedMsg, memory);
-    console.info("[LangChain RAG used]:", !!ragAns);
-    let reply = ragAns;
-    if (!ragAns) {
-      if (intent === 'lead_gen') reply = buildSalesResponse('lead_gen', memory);
-      else if (intent === 'price_pushback') reply = buildSalesResponse('objection', memory);
-      else if (intent === 'close') reply = buildSalesResponse('close', memory);
-      else reply = buildSalesResponse('default', memory);
-      console.info("[Sales fallback triggered]:", reply);
-    }
-
+    const answer = await smartAnswer(normalizedMsg, memory) 
+      || await semanticLookup(normalizedMsg, memory)
+      || await salesFallback(normalizedMsg, memory);
+    
     // Remember the message
     await remember(phone, 'lastMsg', normalizedMsg);
     console.info("[Memory Updated] lastMsg saved:", normalizedMsg);
 
     // Send response via WhatsApp
-    await sendWhatsAppMessage(phone, reply);
+    await sendWhatsAppMessage(phone, answer);
     
-    return reply;
+    return answer;
   } catch (error) {
     console.error("Error handling message:", error);
     const errorMsg = "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
     await sendWhatsAppMessage(phone, errorMsg);
     return errorMsg;
   }
+}
+
+// Helper function for sales fallback
+async function salesFallback(userMsg, memory) {
+  const intent = intentDetect(userMsg);
+  if (intent === 'lead_gen') return buildSalesResponse('lead_gen', memory);
+  if (intent === 'price_pushback') return buildSalesResponse('objection', memory);
+  if (intent === 'close') return buildSalesResponse('close', memory);
+  return buildSalesResponse('default', memory);
 }
 
 // Helper function to detect quote intent
