@@ -1,7 +1,7 @@
 import { ConversationalRetrievalQAChain } from 'langchain/chains';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
-import { PromptTemplate } from 'langchain/prompts';
+import { PromptTemplate } from 'langchain/prompts/index.js';
 import pg from 'pg';
 import 'dotenv/config';
 
