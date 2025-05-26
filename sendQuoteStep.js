@@ -1,4 +1,4 @@
-import { sendWhatsAppMessage } from './services/twilio.js';
+import { sendWapp } from './services/twilioService.js';
 
 // Quote flow stages
 const QUOTE_STAGES = {
@@ -76,7 +76,7 @@ async function sendCoverageTypeButtons(phone) {
     }
   };
   
-  return await sendWhatsAppMessage(phone, payload);
+  return await sendWapp(phone, JSON.stringify(payload), null);
 }
 
 /**
@@ -134,7 +134,7 @@ async function sendPropertyTypeButtons(phone) {
     }
   };
   
-  return await sendWhatsAppMessage(phone, payload);
+  return await sendWapp(phone, JSON.stringify(payload), null);
 }
 
 /**
@@ -182,5 +182,5 @@ async function sendSettlementList(phone) {
     }
   };
   
-  return await sendWhatsAppMessage(phone, payload);
+  return await sendWapp(phone, JSON.stringify(payload), null);
 } 
