@@ -4,6 +4,7 @@ import { lookupRelevantQAs } from './services/vectorSearch.js';
 import { recall, remember, updateCustomer } from "./services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "./services/salesTemplates.js";
 import { smartAnswer } from "./services/ragChain.js";
+import { startHouseQuoteFlow } from "./houseQuoteFlow.js";
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.78;
@@ -106,6 +107,44 @@ export async function handleMessage(phone, userMsg) {
     // Get memory and detect intent
     const memory = await recall(phone);
     console.info("[Memory Loaded]:", memory);
+    
+    // Check if user is already in quote flow
+    if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
+      console.info("[Quote Flow] User is in quote flow, routing to quote handler");
+      const quoteResponse = await startHouseQuoteFlow(phone, userMsg);
+      return quoteResponse;
+    }
+    
+    // Check for quote confirmation flow
+    const isQuoteRequest = detectQuoteIntent(userMsg);
+    const isConfirmation = detectConfirmation(userMsg);
+    
+    // Handle quote confirmation flow
+    if (memory.awaitingQuoteConfirmation && isConfirmation) {
+      // User confirmed, clear the flag and start quote form
+      await remember(phone, 'awaitingQuoteConfirmation', null);
+      await remember(phone, 'quoteStage', 'id_number'); // Initialize quote flow
+      
+      const confirmationReply = "✅ *מעולה!*\n\nבואו נתחיל בתהליך הצעת המחיר. אני אשאל אותך כמה שאלות קצרות כדי להכין עבורך הצעה מותאמת אישית.\n\n🚀 *מתחילים עכשיו...*";
+      await sendWhatsAppMessage(phone, confirmationReply);
+      
+      // Start the house quote flow
+      const quoteResponse = await startHouseQuoteFlow(phone, "");
+      
+      return confirmationReply;
+    }
+    
+    if (isQuoteRequest && !memory.awaitingQuoteConfirmation) {
+      // User wants a quote but hasn't confirmed yet
+      await remember(phone, 'awaitingQuoteConfirmation', true);
+      
+      const confirmationMsg = "האם אתה מאשר להתחיל תהליך של הצעת מחיר לביטוח דירה?";
+      
+      // Send message with quick reply button
+      await sendWhatsAppMessageWithButton(phone, confirmationMsg, "אני מאשר", "CONFIRM_START_QUOTE");
+      return confirmationMsg;
+    }
+    
     const intent = intentDetect(userMsg);
     console.info("[Intent Detected]:", intent);
     
@@ -137,6 +176,47 @@ export async function handleMessage(phone, userMsg) {
   }
 }
 
+// Helper function to detect quote intent
+function detectQuoteIntent(userMsg) {
+  const quotePatterns = [
+    /אני רוצה הצעת מחיר/i,
+    /כמה עולה ביטוח דירה/i,
+    /שלח לי טופס ביטוח/i,
+    /מעוניין לבטח את הדירה/i,
+    /הצעת מחיר/i,
+    /כמה עולה/i,
+    /מחיר.*ביטוח/i,
+    /ביטוח.*מחיר/i,
+    /רוצה.*הצעה/i,
+    /מעוניין.*הצעה/i,
+    /מה המחיר/i,
+    /כמה זה עולה/i,
+    /טופס.*ביטוח/i,
+    /רוצה לבטח/i,
+    /מעוניין בביטוח/i
+  ];
+  
+  return quotePatterns.some(pattern => pattern.test(userMsg));
+}
+
+// Helper function to detect confirmation
+function detectConfirmation(userMsg) {
+  const confirmationPatterns = [
+    /אני מאשר/i,
+    /מאשר/i,
+    /כן/i,
+    /בסדר/i,
+    /אוקיי/i,
+    /ok/i,
+    /בואו נתחיל/i,
+    /אני מוכן/i,
+    /נעשה את זה/i,
+    /CONFIRM_START_QUOTE/i
+  ];
+  
+  return confirmationPatterns.some(pattern => pattern.test(userMsg));
+}
+
 // WhatsApp message sending function
 export async function sendWhatsAppMessage(to, message) {
   if (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
@@ -162,6 +242,57 @@ export async function sendWhatsAppMessage(to, message) {
   } catch (error) {
     console.error("Error sending WhatsApp message:", error.response?.data || error.message);
     throw error;
+  }
+}
+
+// WhatsApp message sending function with quick reply button
+export async function sendWhatsAppMessageWithButton(to, message, buttonTitle, buttonPayload) {
+  if (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
+    console.error("❌ WhatsApp API configuration missing");
+    return;
+  }
+
+  try {
+    const payload = {
+      messaging_product: "whatsapp",
+      to: to,
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: {
+          text: message
+        },
+        action: {
+          buttons: [
+            {
+              type: "reply",
+              reply: {
+                id: buttonPayload,
+                title: buttonTitle
+              }
+            }
+          ]
+        }
+      }
+    };
+
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      payload,
+      { 
+        headers: { 
+          Authorization: `Bearer ${process.env.WHATSAPP_API_TOKEN}`, 
+          "Content-Type": "application/json" 
+        } 
+      }
+    );
+    
+    console.log(`✅ Sent WhatsApp message with button to ${to}`);
+  } catch (error) {
+    console.error("Error sending WhatsApp message with button:", error.response?.data || error.message);
+    // Fallback to regular message if button fails
+    console.log("🔄 Falling back to regular message...");
+    await sendWhatsAppMessage(to, `${message}\n\n[${buttonTitle}]`);
   }
 }
 
