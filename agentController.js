@@ -115,26 +115,13 @@ export async function handleMessage(phone, userMsg) {
       return 'Quote form sent successfully via WhatsApp.';
     }
     
-    // Check for quote request patterns
+    // Refined quote request patterns
     const quotePatterns = [
       /אני רוצה הצעת מחיר/i,
+      /שלח לי הצעה/i,
       /תן לי הצעת מחיר/i,
       /הצעת מחיר לביטוח/i,
-      /ביטוח דירה/i,
-      /מעוניין בביטוח דירה/i,
-      /שלח לי טופס ביטוח/i,
-      /רוצה לבטח את הדירה/i,
-      /כמה עולה ביטוח דירה/i,
-      /הצעת מחיר/i,
-      /כמה עולה/i,
-      /מחיר.*ביטוח/i,
-      /ביטוח.*מחיר/i,
-      /רוצה.*הצעה/i,
-      /מעוניין.*הצעה/i,
-      /מה המחיר/i,
-      /כמה זה עולה/i,
-      /רוצה לבטח/i,
-      /מעוניין בביטוח/i
+      /שלח לי טופס ביטוח/i
     ];
     
     // Check for quote request
@@ -177,7 +164,7 @@ export async function handleMessage(phone, userMsg) {
       return 'Quote form sent successfully via WhatsApp.';
     }
     
-    // If we get here and it's not a quote request, handle with RAG/GPT
+    // Fallback to RAG/GPT logic for non-quote requests
     const intent = intentDetect(normalizedMsg);
     console.info("[Intent Detected]:", intent);
     
