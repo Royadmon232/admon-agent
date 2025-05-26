@@ -92,29 +92,32 @@ async function sendSettlementList(phone) {
   return message;
 }
 
-if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
-  console.info('[Quote Flow] User is in quote flow stage:', memory.quoteStage);
-  const quoteResponse = await startHouseQuoteFlow(phone, userMsg);
-  await sendWapp(phone, quoteResponse);
-  return 'Quote form sent successfully via WhatsApp.';
-} 
-
-const isQuoteRequest = quotePatterns.some(pattern => {
-  const matches = pattern.test(normalizedMsg);
-  if (matches) {
-    console.info(`[Quote Flow] Quote pattern matched: ${pattern} for message: "${normalizedMsg}"`);
+// Encapsulate the logic in a function to fix the illegal return statement
+async function handleQuoteFlow(phone, userMsg, memory) {
+  if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
+    console.info('[Quote Flow] User is in quote flow stage:', memory.quoteStage);
+    const quoteResponse = await startHouseQuoteFlow(phone, userMsg);
+    await sendWapp(phone, quoteResponse);
+    return 'Quote form sent successfully via WhatsApp.';
   }
-  return matches;
-}); 
 
-const isConfirmation = detectConfirmation(normalizedMsg);
-if (memory.awaitingQuoteConfirmation && isConfirmation) {
-  // User confirmed, clear the flag and start quote form
-  await remember(phone, 'awaitingQuoteConfirmation', null);
-  await remember(phone, 'quoteStage', 'id_number');
-  // ...
+  const isQuoteRequest = quotePatterns.some(pattern => {
+    const matches = pattern.test(normalizedMsg);
+    if (matches) {
+      console.info(`[Quote Flow] Quote pattern matched: ${pattern} for message: "${normalizedMsg}"`);
+    }
+    return matches;
+  });
+
+  const isConfirmation = detectConfirmation(normalizedMsg);
+  if (memory.awaitingQuoteConfirmation && isConfirmation) {
+    // User confirmed, clear the flag and start quote form
+    await remember(phone, 'awaitingQuoteConfirmation', null);
+    await remember(phone, 'quoteStage', 'id_number');
+    // ...
+  }
+
+  const answer = await smartAnswer(normalizedMsg, memory) 
+    || await semanticLookup(normalizedMsg, memory)
+    || await salesFallback(normalizedMsg, memory);
 } 
-
-const answer = await smartAnswer(normalizedMsg, memory) 
-  || await semanticLookup(normalizedMsg, memory)
-  || await salesFallback(normalizedMsg, memory); 
