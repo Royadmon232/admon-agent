@@ -90,6 +90,14 @@ export async function startHouseQuoteFlow(phone, userMsg) {
   try {
     // Get current memory/session data
     const memory = await recall(phone);
+    
+    // Send initial message if starting new quote flow
+    if (!memory.quoteStage || memory.quoteStage === QUOTE_STAGES.ID_NUMBER) {
+      await sendWhatsAppMessage(phone, "מה מספר תעודת הזהות שלך?");
+      await remember(phone, { quoteStage: QUOTE_STAGES.ID_NUMBER });
+      return;
+    }
+    
     const currentStage = memory.quoteStage || QUOTE_STAGES.ID_NUMBER;
     
     console.info(`[Quote Flow] Current stage: ${currentStage} for ${phone}`);
