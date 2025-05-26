@@ -98,6 +98,31 @@ export async function semanticLookup(userMsg, memory = {}) {
 // Main message handler
 export async function handleMessage(phone, userMsg) {
   try {
+    // Check for quote request at the very top
+    const quotePatterns = [
+      /אני רוצה הצעת מחיר/i,
+      /מעוניין בביטוח דירה/i,
+      /שלח לי טופס ביטוח/i,
+      /רוצה לבטח את הדירה/i,
+      /כמה עולה ביטוח דירה/i,
+      /הצעת מחיר/i,
+      /כמה עולה/i,
+      /מחיר.*ביטוח/i,
+      /ביטוח.*מחיר/i,
+      /רוצה.*הצעה/i,
+      /מעוניין.*הצעה/i,
+      /מה המחיר/i,
+      /כמה זה עולה/i,
+      /רוצה לבטח/i,
+      /מעוניין בביטוח/i
+    ];
+    
+    const isQuoteRequest = quotePatterns.some(pattern => pattern.test(userMsg));
+    if (isQuoteRequest) {
+      console.info("[Quote Flow] Quote request detected, starting quote flow");
+      return await startHouseQuoteFlow(phone, userMsg);
+    }
+
     // Extract name if present
     if (/^(?:אני|שמי)\s+([^\s]+)/i.test(userMsg)) {
       const name = RegExp.$1;
@@ -115,25 +140,7 @@ export async function handleMessage(phone, userMsg) {
       return quoteResponse;
     }
     
-    // Check for quote request before RAG lookup
-    const quotePatterns = [
-      /אני רוצה הצעת מחיר/i,
-      /כמה עולה ביטוח דירה/i,
-      /מעוניין לבטח את הדירה/i,
-      /טופס ביטוח/i,
-      /הצעת מחיר/i,
-      /כמה עולה/i,
-      /מחיר.*ביטוח/i,
-      /ביטוח.*מחיר/i,
-      /רוצה.*הצעה/i,
-      /מעוניין.*הצעה/i,
-      /מה המחיר/i,
-      /כמה זה עולה/i,
-      /רוצה לבטח/i,
-      /מעוניין בביטוח/i
-    ];
-    
-    const isQuoteRequest = quotePatterns.some(pattern => pattern.test(userMsg));
+    // Check for quote confirmation flow
     const isConfirmation = detectConfirmation(userMsg);
     
     // Handle quote confirmation flow
