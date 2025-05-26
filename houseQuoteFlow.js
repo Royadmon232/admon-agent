@@ -96,7 +96,7 @@ export async function startHouseQuoteFlow(phone, userMsg) {
       const message = "מה מספר תעודת הזהות שלך?";
       await sendWhatsAppMessage(phone, message);
       await remember(phone, { quoteStage: QUOTE_STAGES.ID_NUMBER });
-      return message; // Return the message to prevent fallback to GPT/RAG
+      return message; // Return message to prevent GPT fallback
     }
     
     const currentStage = memory.quoteStage || QUOTE_STAGES.ID_NUMBER;
