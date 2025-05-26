@@ -17,18 +17,18 @@ const QUOTE_STAGES = {
  * Sends an interactive WhatsApp message based on the current quote stage
  * @param {string} phone - User's phone number
  * @param {string} stage - Current quote stage
- * @returns {Promise<object>} - Response from WhatsApp API
+ * @returns {Promise<object>} - WhatsApp-compatible JSON object for Twilio
  */
 export async function sendQuoteStep(phone, stage) {
   switch (stage) {
     case QUOTE_STAGES.COVERAGE_TYPE:
-      return await sendCoverageTypeButtons(phone);
+      return sendCoverageTypeButtons(phone);
       
     case QUOTE_STAGES.PROPERTY_TYPE:
-      return await sendPropertyTypeButtons(phone);
+      return sendPropertyTypeButtons(phone);
       
     case QUOTE_STAGES.SETTLEMENT:
-      return await sendSettlementList(phone);
+      return sendSettlementList(phone);
       
     default:
       throw new Error(`Unsupported quote stage: ${stage}`);
@@ -38,8 +38,8 @@ export async function sendQuoteStep(phone, stage) {
 /**
  * Sends interactive buttons for coverage type selection
  */
-async function sendCoverageTypeButtons(phone) {
-  const payload = {
+function sendCoverageTypeButtons(phone) {
+  return {
     messaging_product: "whatsapp",
     to: phone,
     type: "interactive",
@@ -75,15 +75,13 @@ async function sendCoverageTypeButtons(phone) {
       }
     }
   };
-  
-  return await sendWapp(phone, JSON.stringify(payload), null);
 }
 
 /**
  * Sends interactive buttons for property type selection
  */
-async function sendPropertyTypeButtons(phone) {
-  const payload = {
+function sendPropertyTypeButtons(phone) {
+  return {
     messaging_product: "whatsapp",
     to: phone,
     type: "interactive",
@@ -133,15 +131,13 @@ async function sendPropertyTypeButtons(phone) {
       }
     }
   };
-  
-  return await sendWapp(phone, JSON.stringify(payload), null);
 }
 
 /**
  * Sends an interactive list message for settlement selection
  */
-async function sendSettlementList(phone) {
-  const payload = {
+function sendSettlementList(phone) {
+  return {
     messaging_product: "whatsapp",
     to: phone,
     type: "interactive",
@@ -181,6 +177,4 @@ async function sendSettlementList(phone) {
       }
     }
   };
-  
-  return await sendWapp(phone, JSON.stringify(payload), null);
 } 
