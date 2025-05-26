@@ -44,6 +44,11 @@ const prompt = new PromptTemplate({
   inputVariables: ['context', 'question']
 });
 
+if (!(prompt instanceof PromptTemplate)) {
+  console.error("❌ LangChain prompt template initialization failed: invalid template type");
+  throw new Error("Prompt must be a valid instance of PromptTemplate");
+}
+
 console.info("✅ LangChain PromptTemplate initialized with Hebrew insurance context");
 
 let vectorStore = null;
