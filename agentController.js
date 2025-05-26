@@ -122,49 +122,39 @@ export async function handleMessage(phone, userMsg) {
       /מעוניין בביטוח/i
     ];
     
+    // Check for quote request first
     const isQuoteRequest = quotePatterns.some(pattern => {
       const matches = pattern.test(normalizedMsg);
       if (matches) {
-        console.info(`[DEBUG] Quote pattern matched: ${pattern} for message: "${normalizedMsg}"`);
+        console.info(`[Quote Flow] Quote pattern matched: ${pattern} for message: "${normalizedMsg}"`);
       }
       return matches;
     });
     
-    console.info(`[DEBUG] isQuoteRequest: ${isQuoteRequest}`);
-    
+    // If it's a quote request, handle it immediately and return
     if (isQuoteRequest) {
       console.info("[Quote Flow] Quote request detected, starting quote flow immediately");
-      try {
-        const quoteResponse = await startHouseQuoteFlow(phone, normalizedMsg);
-        console.info("[Quote Flow] Quote flow response:", quoteResponse);
-        return quoteResponse;
-      } catch (error) {
-        console.error("[Quote Flow] Error in startHouseQuoteFlow:", error);
-        throw error;
-      }
+      const quoteResponse = await startHouseQuoteFlow(phone, normalizedMsg);
+      console.info("[Quote Flow] Quote flow response:", quoteResponse);
+      return quoteResponse;
     }
-
-    // Extract name if present
-    if (/^(?:אני|שמי)\s+([^\s]+)/i.test(normalizedMsg)) {
-      const name = RegExp.$1;
-      await updateCustomer(phone, { first_name: name });
-    }
-
-    // Get memory and detect intent
-    const memory = await recall(phone);
-    console.info("[Memory Loaded]:", memory);
     
-    // Check if user is already in quote flow
+    // Get memory and check if user is already in quote flow
+    const memory = await recall(phone);
     if (memory.quoteStage && memory.quoteStage !== 'stage1_completed') {
       console.info("[Quote Flow] User is in quote flow, routing to quote handler");
       const quoteResponse = await startHouseQuoteFlow(phone, normalizedMsg);
       return quoteResponse;
     }
     
+    // Extract name if present
+    if (/^(?:אני|שמי)\s+([^\s]+)/i.test(normalizedMsg)) {
+      const name = RegExp.$1;
+      await updateCustomer(phone, { first_name: name });
+    }
+    
     // Check for quote confirmation flow
     const isConfirmation = detectConfirmation(normalizedMsg);
-    
-    // Handle quote confirmation flow
     if (memory.awaitingQuoteConfirmation && isConfirmation) {
       // User confirmed, clear the flag and start quote form
       await remember(phone, 'awaitingQuoteConfirmation', null);
@@ -175,12 +165,10 @@ export async function handleMessage(phone, userMsg) {
       
       // Start the house quote flow
       const quoteResponse = await startHouseQuoteFlow(phone, "");
-      
-      return confirmationReply;
+      return quoteResponse;
     }
     
-
-    
+    // If we get here, handle with RAG/GPT
     const intent = intentDetect(normalizedMsg);
     console.info("[Intent Detected]:", intent);
     
