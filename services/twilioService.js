@@ -66,18 +66,19 @@ async function sendMessageWithRetryAndQueue(messagePayload, recipientInfo) {
         try {
           return client.messages.create(messagePayload);
         } catch (err) {
-          if (err.code === 63016 || err.code === 63018) {
-            console.warn('Twilio daily limit hit – skipping send');
-            return null; // or call smsFallback(...)
+          if (err.code === 63038) {
+            console.warn('[Twilio] Sandbox daily-limit hit');
+            return { limited: true };
           }
           throw err;
         }
       });
-      if (message === null) {
-        // Daily limit hit, treat as a special case
+      
+      if (message && message.limited) {
         console.log(`Attempt ${attempt}: Daily limit reached for ${recipientInfo}`);
-        return null;
+        return { limited: true };
       }
+      
       console.log(`Attempt ${attempt}: Successfully sent ${recipientInfo}. SID: ${message.sid}`);
       return message; // Success
     } catch (error) {
@@ -158,8 +159,8 @@ async function smsFallback(to, body) {
     return { success: false, error: 'Twilio client not initialized.' };
   }
   if (!smsServiceSid) {
-    console.warn('⚠️ TWILIO_SMS_SID is not configured. SMS fallback disabled.');
-    return { success: false, error: 'SMS fallback service (TWILIO_SMS_SID) not configured.' };
+    console.warn('[Twilio] SMS fallback skipped – TWILIO_SMS_SID missing');
+    return { smsSkipped: true };
   }
   if (!to || !body) {
     console.error('❌ "to" and "body" are required for sending SMS message.');
@@ -174,8 +175,7 @@ async function smsFallback(to, body) {
 
   try {
     const message = await sendMessageWithRetryAndQueue(messageData, `SMS fallback to ${to}`);
-    if (message === null) {
-      // Daily limit hit
+    if (message && message.limited) {
       await logDelivery('daily_limit_reached', 'sms');
       return { success: false, error: 'Daily message limit reached' };
     }

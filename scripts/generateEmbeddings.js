@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { normalize } from '../utils/normalize.js';
 import { getEmbedding } from '../utils/embeddingUtils.js';
+import { runMetadataMigration } from './utils/dbUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,5 +106,8 @@ New rows inserted into database: ${rowsInserted}
     console.log('Database pool closed.');
   }
 }
+
+// TODO: remove after verified in all envs
+await runMetadataMigration();   // one-time DB check
 
 seedEmbeddings(); 
