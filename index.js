@@ -289,7 +289,7 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
       if (!simulateMode) {
         await sendWhatsAppMessage(fromId, replyToSend);
       }
-      return;
+      return;   // stop here – avoid fallback duplicates
     }
 
     // If not FAQ but text shows quote intent → init questionnaire
@@ -345,21 +345,6 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
     }
     if (simulateMode) return replyToSend;
     else return;
-  }
-  
-  // If no other path handled the message, use semantic lookup
-  replyToSend = await handleMessage(clean); // handleMessage already sends the reply
-  if (!replyToSend) {
-    replyToSend = "מצטער, לא הצלחתי לעבד את בקשתך כרגע. נסה שוב מאוחר יותר.";
-  }
-  
-  conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
-  if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
-    conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
-  }
-  
-  if (simulateMode) {
-    return replyToSend;
   }
 }
 
