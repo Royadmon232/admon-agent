@@ -473,14 +473,25 @@ app.post('/twilio/webhook', async (req, res) => {
   const senderPhone = senderPhoneWithPrefix.replace(/^whatsapp:/i, '');
 
   try {
-    const wappResult = await sendWapp(senderPhone, messageText);
+    const botResponse = await handleMessage(senderPhone, messageText);
+
+    if (!botResponse || typeof botResponse !== 'string' || botResponse.startsWith("מצטער, אירעה שגיאה")) {
+      console.error(`[Twilio] Failed to get valid response from handleMessage for: "${messageText}". Response: ${botResponse}`);
+      // Optionally, send a generic error message back to the user if handleMessage failed
+      // For now, just return 500 as the original plan was to return 500 on failure to get bot response
+      return res.status(500).send('Failed to get bot response.');
+    }
+
+    console.log(`[Twilio] Bot response for ${senderPhone}: "${botResponse.substring(0, 60)}..."`);
+
+    const wappResult = await sendWapp(senderPhone, botResponse);
 
     if (wappResult.success) {
       console.log(`[Twilio] Successfully sent WhatsApp reply to ${senderPhone}. SID: ${wappResult.sid}`);
       return res.status(200).type('text/xml').send('<Response/>'); // Twilio expects XML response for success
     } else {
       console.warn(`[Twilio] Failed to send WhatsApp reply to ${senderPhone}, attempting SMS fallback. Error: ${wappResult.error}`);
-      const smsResult = await smsFallback(senderPhone, messageText);
+      const smsResult = await smsFallback(senderPhone, botResponse);
       if (smsResult.success) {
         console.log(`[Twilio] Successfully sent SMS fallback to ${senderPhone}. SID: ${smsResult.sid}`);
         return res.status(200).type('text/xml').send('<Response/>');
