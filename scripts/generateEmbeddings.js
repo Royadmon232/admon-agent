@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { normalize } from '../utils/normalize.js';
 import { getEmbedding } from '../utils/embeddingUtils.js';
-import { runMetadataMigration } from './utils/dbUtils.js';
+import { runMetadataMigration } from '../utils/dbUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
