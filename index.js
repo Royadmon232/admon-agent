@@ -1,5 +1,6 @@
 import 'dotenv/config';  // ensures DATABASE_URL loaded
 import { runMetadataMigration } from './utils/dbUtils.js';
+import { initializeChain } from './services/ragChain.js';
 
 /*
 ============================
@@ -509,6 +510,7 @@ const PORT = process.env.PORT || 3000;
 
 // TODO: remove after verified in all envs
 await runMetadataMigration();   // one-time DB check
+await initializeChain();     // <- start RAG only after column exists
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

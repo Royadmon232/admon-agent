@@ -56,7 +56,7 @@ let vectorStore = null;
 let chain = null;
 
 // Initialize the RAG chain
-async function initializeChain() {
+export async function initializeChain() {
   try {
     // Initialize PGVector store using external DATABASE_URL
     vectorStore = await PGVectorStore.initialize(embeddings, {
@@ -96,7 +96,7 @@ async function initializeChain() {
 }
 
 // Initialize on module load
-initializeChain();
+// initializeChain(); // Commented out - now called from index.js after metadata migration
 
 /**
  * Get smart answer using LangChain RAG

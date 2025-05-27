@@ -82,6 +82,10 @@ async function sendMessageWithRetryAndQueue(messagePayload, recipientInfo) {
       console.log(`Attempt ${attempt}: Successfully sent ${recipientInfo}. SID: ${message.sid}`);
       return message; // Success
     } catch (error) {
+      if (error.code === 63038) {              // Sandbox daily-limit hit
+        console.warn('[Twilio] Daily Sandbox limit reached – skipping retries');
+        return { limited: true };
+      }
       lastError = error;
       console.warn(`Attempt ${attempt}: Failed to send ${recipientInfo}. Error: ${error.message}`);
       if (attempt < 3) {
