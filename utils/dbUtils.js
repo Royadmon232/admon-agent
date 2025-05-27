@@ -1,4 +1,4 @@
-import { pool } from '../scripts/generateEmbeddings.js';
+import pool from './dbPool.js';
 
 export async function runMetadataMigration() {
   try {

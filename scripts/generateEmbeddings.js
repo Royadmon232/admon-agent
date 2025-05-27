@@ -1,18 +1,14 @@
 import 'dotenv/config';
-import { Pool } from 'pg';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { normalize } from '../utils/normalize.js';
 import { getEmbedding } from '../utils/embeddingUtils.js';
 import { runMetadataMigration } from '../utils/dbUtils.js';
+import pool from '../utils/dbPool.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
 
 const KNOWLEDGE_FILE_PATH = path.join(__dirname, '../insurance_knowledge.json');
 const EMBEDDING_VECTOR_DIMENSION = 1536; // text-embedding-3-small produces 1536 dimensions
