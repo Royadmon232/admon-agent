@@ -28,9 +28,16 @@ async function seedEmbeddings() {
         id SERIAL PRIMARY KEY,
         question TEXT,
         answer   TEXT,
-        embedding vector(1536)
+        embedding vector(1536),
+        metadata JSONB DEFAULT '{}'::jsonb
     );`);
     console.log('[seed] table ready');
+
+    // make sure column exists in prod, even if table was created earlier
+    await client.query(`
+      ALTER TABLE insurance_qa
+      ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+    `);
 
     // Load insurance knowledge base
     const rawData = await fs.readFile(KNOWLEDGE_FILE_PATH, 'utf8');
