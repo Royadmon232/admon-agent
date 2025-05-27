@@ -2,6 +2,7 @@ import { ConversationalRetrievalQAChain } from 'langchain/chains';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
 import { PromptTemplate } from '@langchain/core/prompts';
+import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import pg from 'pg';
 import 'dotenv/config';
 
@@ -117,10 +118,9 @@ export async function smartAnswer(text, memory = {}) {
     if (memory.homeValue) context += ` ערך דירתו ${memory.homeValue}₪.`;
 
     // Get chat history from memory (simplified)
-    const chatHistory = memory.lastMsg ? [
-      { role: 'human', content: memory.lastMsg },
-      { role: 'ai', content: 'הבנתי' }
-    ] : [];
+    const chatHistory = [];
+    if (memory.lastMsg)   chatHistory.push(new HumanMessage(memory.lastMsg));
+    if (memory.lastReply) chatHistory.push(new AIMessage(memory.lastReply));
 
     // Query the chain
     const response = await chain.call({

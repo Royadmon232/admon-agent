@@ -346,7 +346,7 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
   }
   
   // If no other path handled the message, use semantic lookup
-  replyToSend = await handleMessage(clean);
+  replyToSend = await handleMessage(clean); // handleMessage already sends the reply
   if (!replyToSend) {
     replyToSend = "מצטער, לא הצלחתי לעבד את בקשתך כרגע. נסה שוב מאוחר יותר.";
   }
@@ -356,11 +356,6 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
     conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
   }
   
-  if (!simulateMode && replyToSend) {
-    console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
-    await sendWhatsAppMessage(fromId, replyToSend);
-  }
-
   if (simulateMode) {
     return replyToSend;
   }

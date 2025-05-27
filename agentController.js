@@ -125,14 +125,10 @@ export async function handleMessage(phone, userMsg) {
     await remember(phone, 'lastMsg', normalizedMsg);
     console.info("[Memory Updated] lastMsg saved:", normalizedMsg);
 
-    // Send response via WhatsApp
-    await sendWhatsAppMessage(phone, answer);
-    
     return answer;
   } catch (error) {
     console.error("Error handling message:", error);
     const errorMsg = "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
-    await sendWhatsAppMessage(phone, errorMsg);
     return errorMsg;
   }
 }

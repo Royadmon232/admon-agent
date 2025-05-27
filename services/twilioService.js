@@ -62,7 +62,22 @@ async function sendMessageWithRetryAndQueue(messagePayload, recipientInfo) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       // Add the client.messages.create call to the queue
-      const message = await queue.add(() => client.messages.create(messagePayload));
+      const message = await queue.add(() => {
+        try {
+          return client.messages.create(messagePayload);
+        } catch (err) {
+          if (err.code === 63016 || err.code === 63018) {
+            console.warn('Twilio daily limit hit – skipping send');
+            return null; // or call smsFallback(...)
+          }
+          throw err;
+        }
+      });
+      if (message === null) {
+        // Daily limit hit, treat as a special case
+        console.log(`Attempt ${attempt}: Daily limit reached for ${recipientInfo}`);
+        return null;
+      }
       console.log(`Attempt ${attempt}: Successfully sent ${recipientInfo}. SID: ${message.sid}`);
       return message; // Success
     } catch (error) {
@@ -116,6 +131,11 @@ async function sendWapp(to, body, mediaUrl = null) {
 
   try {
     const message = await sendMessageWithRetryAndQueue(messageData, `WhatsApp to ${to}`);
+    if (message === null) {
+      // Daily limit hit
+      await logDelivery('daily_limit_reached', 'whatsapp');
+      return { success: false, error: 'Daily message limit reached' };
+    }
     console.log(`✅ WhatsApp message sent to ${to}. SID: ${message.sid}`); // Final success log
     await logDelivery('success', 'whatsapp');
     return { success: true, sid: message.sid };
@@ -154,6 +174,11 @@ async function smsFallback(to, body) {
 
   try {
     const message = await sendMessageWithRetryAndQueue(messageData, `SMS fallback to ${to}`);
+    if (message === null) {
+      // Daily limit hit
+      await logDelivery('daily_limit_reached', 'sms');
+      return { success: false, error: 'Daily message limit reached' };
+    }
     console.log(`✅ SMS fallback sent to ${to}. SID: ${message.sid}`); // Final success log
     await logDelivery('success', 'sms');
     return { success: true, sid: message.sid };
