@@ -97,7 +97,7 @@ export async function initializeChain() {
 }
 
 // Initialize on module load
-// initializeChain(); // Commented out - now called from index.js after metadata migration
+// initializeChain(); // Commented out - now called from index.js
 
 /**
  * Get smart answer using LangChain RAG

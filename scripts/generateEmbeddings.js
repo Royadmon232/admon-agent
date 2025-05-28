@@ -18,7 +18,7 @@ async function seedEmbeddings() {
     client = await pool.connect();
     console.log('Successfully connected to the database.');
 
-    // PHASE-2: Create extension and table
+    // Create extension and table
     await client.query('CREATE EXTENSION IF NOT EXISTS vector');
     await client.query(`CREATE TABLE IF NOT EXISTS insurance_qa (
       id SERIAL PRIMARY KEY,
@@ -31,7 +31,7 @@ async function seedEmbeddings() {
     // Load insurance knowledge base
     const rawData = await fs.readFile(KNOWLEDGE_FILE_PATH, 'utf8');
     const knowledgeBase = JSON.parse(rawData);
-    const qas = knowledgeBase.insurance_home_il_qa; // Assuming this is the array of Q&A pairs
+    const qas = knowledgeBase.insurance_home_il_qa;
 
     if (!qas || !Array.isArray(qas)) {
       console.error('Could not find Q&A array in insurance_knowledge.json');
@@ -48,12 +48,11 @@ async function seedEmbeddings() {
         continue;
       }
 
-      // Check if question already exists (using original question text)
+      // Check if question already exists
       const checkQuery = 'SELECT id FROM insurance_qa WHERE question = $1';
       const { rows: existingRows } = await client.query(checkQuery, [originalQuestion]);
 
       if (existingRows.length > 0) {
-        // console.log(`Question already exists, skipping: "${originalQuestion.substring(0,50)}..."`);
         continue;
       }
 
