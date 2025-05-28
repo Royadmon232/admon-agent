@@ -1,4 +1,5 @@
 import 'dotenv/config';  // ensures DATABASE_URL loaded
+import "./vectorIndexer.js";
 import { runMetadataMigration } from './utils/dbUtils.js';
 import { initializeChain } from './services/ragChain.js';
 
