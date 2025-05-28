@@ -5,6 +5,7 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import pg from 'pg';
 import 'dotenv/config';
+import kbConfig from '../src/insuranceKbConfig.js';
 
 console.info("✅ PromptTemplate loaded correctly");
 
@@ -59,18 +60,21 @@ let chain = null;
 export async function initializeChain() {
   try {
     // Initialize PGVector store using external DATABASE_URL
-    vectorStore = await PGVectorStore.initialize({
-      postgresConnectionOptions: {
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false }
-      },
-      tableName: 'insurance_qa',
-      columns: {
-        idColumnName: 'id',
-        vectorColumnName: 'embedding',
-        contentColumnName: 'question'
+    vectorStore = await PGVectorStore.initialize(
+      embeddings,
+      {
+        postgresConnectionOptions: {
+          connectionString: process.env.DATABASE_URL,
+          ssl: { rejectUnauthorized: false }
+        },
+        tableName: kbConfig.tableName,
+        columns: {
+          idColumnName: kbConfig.idColumnName ?? 'id',
+          vectorColumnName: kbConfig.embeddingColumnName,
+          contentColumnName: kbConfig.contentColumnName
+        }
       }
-    });
+    );
 
     // Create the conversational retrieval chain
     chain = ConversationalRetrievalQAChain.fromLLM(

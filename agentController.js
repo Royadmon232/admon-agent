@@ -117,9 +117,10 @@ export async function handleMessage(phone, userMsg) {
     console.info("[Intent Detected]:", intent);
 
     // Get response from RAG or sales
-    const answer = await smartAnswer(normalizedMsg, memory) 
+    const answer =
+      await smartAnswer(normalizedMsg, memory)
       || await semanticLookup(normalizedMsg, memory)
-      || await salesFallback(normalizedMsg, memory);
+      || await buildSalesResponse(normalizedMsg, memory);
     
     // Remember the message
     await remember(phone, 'lastMsg', normalizedMsg);
@@ -131,15 +132,6 @@ export async function handleMessage(phone, userMsg) {
     const errorMsg = "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
     return errorMsg;
   }
-}
-
-// Helper function for sales fallback
-async function salesFallback(userMsg, memory) {
-  const intent = intentDetect(userMsg);
-  if (intent === 'lead_gen') return buildSalesResponse('lead_gen', memory);
-  if (intent === 'price_pushback') return buildSalesResponse('objection', memory);
-  if (intent === 'close') return buildSalesResponse('close', memory);
-  return buildSalesResponse('default', memory);
 }
 
 // WhatsApp message sending function
