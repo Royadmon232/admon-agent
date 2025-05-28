@@ -71,7 +71,8 @@ export async function initializeChain() {
         columns: {
           idColumnName: kbConfig.idColumnName ?? 'id',
           vectorColumnName: kbConfig.embeddingColumnName,
-          contentColumnName: kbConfig.contentColumnName
+          contentColumnName: kbConfig.contentColumnName,
+          metadataColumnName: undefined
         }
       }
     );
