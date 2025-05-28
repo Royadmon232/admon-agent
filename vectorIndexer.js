@@ -59,8 +59,7 @@ dotenv.config();
           columns: {
             idColumnName: 'id',
             vectorColumnName: 'embedding',
-            contentColumnName: 'question',
-            metadataColumnName: 'metadata'
+            contentColumnName: 'question'
           }
         });
 
@@ -69,8 +68,7 @@ dotenv.config();
 
         if (rows.length > 0) {
           const documents = rows.map(row => ({
-            pageContent: row.question,
-            metadata: {}
+            pageContent: row.question
           }));
           await vectorStore.addDocuments(documents);
         }
