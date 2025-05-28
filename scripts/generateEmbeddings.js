@@ -21,20 +21,13 @@ async function seedEmbeddings() {
 
     // PHASE-2: Create extension and table
     await client.query('CREATE EXTENSION IF NOT EXISTS vector');
-    await client.query(`CREATE TABLE IF NOT EXISTS insurance_qa(
-        id SERIAL PRIMARY KEY,
-        question TEXT,
-        answer   TEXT,
-        embedding vector(1536),
-        metadata JSONB DEFAULT '{}'::jsonb
+    await client.query(`CREATE TABLE IF NOT EXISTS insurance_qa (
+      id SERIAL PRIMARY KEY,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      embedding vector(1536)
     );`);
     console.log('[seed] table ready');
-
-    // make sure column exists in prod, even if table was created earlier
-    await client.query(`
-      ALTER TABLE insurance_qa
-      ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
-    `);
 
     // Load insurance knowledge base
     const rawData = await fs.readFile(KNOWLEDGE_FILE_PATH, 'utf8');

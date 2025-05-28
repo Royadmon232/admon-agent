@@ -1,6 +1,5 @@
 import 'dotenv/config';  // ensures DATABASE_URL loaded
 import "./vectorIndexer.js";
-import { runMetadataMigration } from './utils/dbUtils.js';
 import { initializeChain } from './services/ragChain.js';
 
 /*
@@ -494,9 +493,7 @@ app.post('/twilio/webhook', async (req, res) => {
 // =============================
 const PORT = process.env.PORT || 3000;
 
-// TODO: remove after verified in all envs
 await initializeChain();     // creates table if missing
-await runMetadataMigration();   // now ADDs metadata column
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

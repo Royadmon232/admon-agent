@@ -59,19 +59,16 @@ let chain = null;
 export async function initializeChain() {
   try {
     // Initialize PGVector store using external DATABASE_URL
-    vectorStore = await PGVectorStore.initialize(embeddings, {
+    vectorStore = await PGVectorStore.initialize({
       postgresConnectionOptions: {
         connectionString: process.env.DATABASE_URL,
-        ssl: {
-          rejectUnauthorized: false
-        }
+        ssl: { rejectUnauthorized: false }
       },
-      tableName: 'insurance_qa',
+      tableName: "insurance_qa",
       columns: {
-        idColumnName: 'id',
-        vectorColumnName: 'embedding',
-        contentColumnName: 'question',
-        metadataColumnName: 'metadata'
+        idColumnName: "id",
+        vectorColumnName: "embedding",
+        contentColumnName: "question"
       }
     });
 

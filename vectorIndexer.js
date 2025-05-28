@@ -64,16 +64,15 @@ dotenv.config();
           }
         });
 
-        const { rows } = await client.query("SELECT id, question, metadata FROM insurance_qa");
+        const { rows } = await client.query("SELECT id, question FROM insurance_qa");
         console.log(`✅ Found ${rows.length} rows to reindex`);
 
         if (rows.length > 0) {
-          await vectorStore.addDocuments(
-            rows.map((row) => ({
-              pageContent: row.question,
-              metadata: row.metadata || {},
-            }))
-          );
+          const documents = rows.map(row => ({
+            pageContent: row.question,
+            metadata: {}
+          }));
+          await vectorStore.addDocuments(documents);
         }
 
         console.log("✅ Reindexing completed successfully.");
