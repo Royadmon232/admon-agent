@@ -64,11 +64,11 @@ export async function initializeChain() {
         connectionString: process.env.DATABASE_URL,
         ssl: { rejectUnauthorized: false }
       },
-      tableName: "insurance_qa",
+      tableName: 'insurance_qa',
       columns: {
-        idColumnName: "id",
-        vectorColumnName: "embedding",
-        contentColumnName: "question"
+        idColumnName: 'id',
+        vectorColumnName: 'embedding',
+        contentColumnName: 'question'
       }
     });
 
