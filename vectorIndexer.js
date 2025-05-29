@@ -53,16 +53,26 @@ export async function reindexVectors() {
       columns: {
         idColumnName: 'id',
         vectorColumnName: 'embedding',
-        contentColumnName: 'question'
+        contentColumnName: 'answer',
+        metadataColumnName: 'metadata'
       }
     });
 
-    const { rows } = await client.query("SELECT id, question FROM insurance_qa");
+    const { rows } = await client.query(`
+      SELECT id, question, answer, category, complexity
+      FROM   insurance_qa
+    `);
     console.log(`✅ Found ${rows.length} rows to reindex`);
 
     if (rows.length > 0) {
-      const documents = rows.map(row => ({
-        pageContent: row.question
+      const documents = rows.map(r => ({
+        pageContent: r.answer,
+        metadata: {
+          id:         r.id,
+          question:   r.question,
+          category:   r.category,
+          complexity: r.complexity
+        }
       }));
       await vectorStore.addDocuments(documents);
     }

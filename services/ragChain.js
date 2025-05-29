@@ -37,11 +37,14 @@ const llm = new ChatOpenAI({
 // Custom prompt template for Hebrew insurance responses
 const prompt = new PromptTemplate({
   template: `
-אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. דבר בעברית בגוף ראשון.
-הקשר: {context}
-שאלה: {question}
+You are Doni, a professional virtual home insurance agent speaking Hebrew.
+Relevant knowledge:
+{context}
 
-תן תשובה מקצועית, ידידותית ומקיפה בעברית. התייחס לשאלה וכולל את כל המידע הרלוונטי.
+Customer's question:
+{question}
+
+Assume the above content is trustworthy. Respond in Hebrew in a friendly, accurate, and human-like tone. If needed, explain insurance terms simply.
 `,
   inputVariables: ['context', 'question']
 });
@@ -69,10 +72,10 @@ export async function initializeChain() {
         },
         tableName: kbConfig.tableName,
         columns: {
-          idColumnName: kbConfig.idColumnName ?? 'id',
-          vectorColumnName: kbConfig.embeddingColumnName,
-          contentColumnName: kbConfig.contentColumnName
-          
+          idColumnName:        'id',
+          vectorColumnName:    kbConfig.embeddingColumnName,
+          contentColumnName:   kbConfig.contentColumnName,
+          metadataColumnName:  kbConfig.metadataColumnName
         }
       }
     );

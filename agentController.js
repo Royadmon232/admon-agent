@@ -122,9 +122,12 @@ export async function handleMessage(phone, userMsg) {
       || await semanticLookup(normalizedMsg, memory)
       || await buildSalesResponse(normalizedMsg, memory);
     
-    // Remember the message
-    await remember(phone, 'lastMsg', normalizedMsg);
-    console.info("[Memory Updated] lastMsg saved:", normalizedMsg);
+    // Remember the conversation
+    await remember(phone, {
+      lastMsg:   normalizedMsg,
+      lastReply: answer
+    });
+    console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
 
     return answer;
   } catch (error) {
