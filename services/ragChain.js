@@ -93,6 +93,11 @@ export async function initializeChain() {
       }
     );
 
+    // Add debug hook to log retrieved documents
+    chain.on("retrieverEnd", ({ documents }) =>
+      console.debug("[RAG] Top docs:", documents.map(d => d.metadata.id))
+    );
+
     console.log('✅ LangChain RAG chain initialized successfully');
   } catch (error) {
     console.error('⚠️ Failed to initialize LangChain RAG chain:', error.message);

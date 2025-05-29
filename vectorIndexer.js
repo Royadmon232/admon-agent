@@ -65,16 +65,27 @@ export async function reindexVectors() {
     console.log(`✅ Found ${rows.length} rows to reindex`);
 
     if (rows.length > 0) {
-      const documents = rows.map(r => ({
-        pageContent: r.answer,
+      // Filter out rows with null or empty questions
+      const validRows = rows.filter(r => r.question && r.answer);
+      console.log(`✅ ${validRows.length} valid rows with question and answer`);
+
+      const documents = validRows.map(r => ({
+        // 🔑 1️⃣  pageContent now holds both Q & A (better context for GPT)
+        pageContent: `שאלה: ${r.question}\nתשובה: ${r.answer}`,
+        // 🔑 2️⃣  put searchable text (question) into "embeddingInput"
+        embeddingInput: r.question,      // ⬅️ new helper key
         metadata: {
-          id:         r.id,
-          question:   r.question,
-          category:   r.category,
+          id: r.id,
+          category: r.category,
           complexity: r.complexity
         }
       }));
-      await vectorStore.addDocuments(documents);
+
+      // Send custom embeddings (question) while storing full answer context
+      await vectorStore.addVectors(
+        await embeddings.embedDocuments(documents.map(d => d.embeddingInput)),
+        documents.map(({ pageContent, metadata }) => ({ pageContent, metadata }))
+      );
     }
 
     console.log("✅ Reindexing completed successfully.");
