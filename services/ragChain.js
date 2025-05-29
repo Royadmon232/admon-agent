@@ -93,10 +93,12 @@ export async function initializeChain() {
       }
     );
 
-    // Add debug hook to log retrieved documents
-    chain.on("retrieverEnd", ({ documents }) =>
-      console.debug("[RAG] Top docs:", documents.map(d => d.metadata.id))
-    );
+    // Add a safe debug listener only if the chain supports .on()
+    if (typeof chain?.on === "function") {
+      chain.on("retrieverEnd", ({ documents }) =>
+        console.debug("[RAG] Top docs:", documents.map(d => d.metadata.id))
+      );
+    }
 
     console.log('✅ LangChain RAG chain initialized successfully');
   } catch (error) {
@@ -107,6 +109,16 @@ export async function initializeChain() {
 
 // Initialize on module load
 // initializeChain(); // Commented out - now called from index.js
+
+/* ----- helper: split incoming Hebrew/English text into max-5 questions ----- */
+function splitQuestions(text) {
+  return text
+    .split(/[?؟]|[\n\.](?=\s*[^.\n]+[?؟])/g)   // detect ? or line-break+punc
+    .map(s => s.trim())
+    .filter(Boolean)
+    .slice(0, 5);                              // safety cap at 5
+}
+/* -------------------------------------------------------------------------- */
 
 /**
  * Get smart answer using LangChain RAG
@@ -132,18 +144,49 @@ export async function smartAnswer(text, memory = {}) {
     if (memory.lastMsg)   chatHistory.push(new HumanMessage(memory.lastMsg));
     if (memory.lastReply) chatHistory.push(new AIMessage(memory.lastReply));
 
-    // Query the chain
-    const response = await chain.call({
-      question: text + context,
-      chat_history: chatHistory
-    });
+    // Add context to the text for processing
+    const fullText = text + context;
 
-    if (response && response.text) {
-      console.info('[LangChain] Smart answer generated');
-      return response.text.trim();
+    /* ① break one message into separate questions */
+    const questions = splitQuestions(fullText);
+    const answers   = [];
+
+    /* ② run the RAG chain for each question */
+    for (const q of questions) {
+      const res = await chain.call({
+        question: q,
+        chat_history: chatHistory
+      });
+      if (res?.text) answers.push(res.text.trim());
     }
 
-    return null;
+    /* ③ if we have answers, ask GPT-4o to merge them in a marketing tone */
+    if (answers.length > 1) {
+      const merged = await llm.call([new HumanMessage(`
+Combine the following answers into one friendly, marketing-oriented Hebrew reply.
+Keep it professional and clear; do **not** mention these bullet separators.
+
+---
+${answers.join("\n---\n")}
+---
+`)]);
+      console.info("[LangChain] Smart multi-answer generated");
+      return merged.content.trim();
+    }
+
+    /* If only one answer or no split, return the single answer */
+    if (answers.length === 1) {
+      console.info('[LangChain] Smart answer generated');
+      return answers[0];
+    }
+
+    /* fallback to single-question flow if split detected nothing */
+    const res = await chain.call({ 
+      question: fullText, 
+      chat_history: chatHistory 
+    });
+    return res?.text?.trim() || null;
+
   } catch (error) {
     console.error('[LangChain] Error generating smart answer:', error.message);
     return null;
