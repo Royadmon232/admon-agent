@@ -71,7 +71,7 @@ export async function reindexVectors() {
 
       const documents = validRows.map(r => ({
         // 🔑 1️⃣  pageContent now holds both Q & A (better context for GPT)
-        pageContent: `שאלה: ${r.question}\nתשובה: ${r.answer}`,
+        pageContent: `Q: ${r.question}\nA: ${r.answer}`,
         // 🔑 2️⃣  put searchable text (question) into "embeddingInput"
         embeddingInput: r.question,      // ⬅️ new helper key
         metadata: {
