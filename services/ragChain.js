@@ -5,9 +5,9 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import {
   ConversationSummaryBufferMemory,
-  ConversationEntityMemory
+  ConversationEntityMemory,
+  CombinedMemory
 } from "langchain/memory";
-import { CombinedMemory } from "@langchain/core/memory";
 import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
