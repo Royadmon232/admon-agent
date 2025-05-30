@@ -132,7 +132,7 @@ export async function handleMessage(phone, userMsg) {
         await remember(phone, 'lastMsg', normalizedMsg);
         await remember(phone, 'lastReply', answer);
         console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
-        return;
+        return answer;
       }
     }
 
@@ -143,7 +143,7 @@ export async function handleMessage(phone, userMsg) {
         await remember(phone, 'lastMsg', normalizedMsg);
         await remember(phone, 'lastReply', answer);
         console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
-        return;
+        return answer;
       }
     }
 
@@ -167,7 +167,7 @@ export async function handleMessage(phone, userMsg) {
       await remember(phone, 'lastMsg', normalizedMsg);
       await remember(phone, 'lastReply', answer);
       console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
-      return;
+      return answer;
     }
 
     // Fallback to traditional search
@@ -184,9 +184,12 @@ export async function handleMessage(phone, userMsg) {
     await remember(phone, 'lastReply', answer);
     console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
 
+    return answer;
+
   } catch (error) {
     console.error(`[ERROR] Failed to handle message from ${phone}:`, error.message);
     await sendWapp(phone, "מצטער, נתקלתי בבעיה טכנית. אנא נסה שוב או פנה אלינו מאוחר יותר.");
+    return null;
   }
 }
 

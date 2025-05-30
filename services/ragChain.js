@@ -101,13 +101,36 @@ export async function initializeChain() {
       outputKey: 'text'
     });
 
+    // Custom retriever that matches fallback behavior exactly
+    const customRetriever = {
+      async getRelevantDocuments(query) {
+        // Get top-k=8 results
+        const results = await vectorStore.similaritySearchWithScore(query, 8);
+        
+        // Filter by score threshold 0.80 (matching fallback's minScore)
+        const filteredResults = results.filter(([doc, score]) => score >= 0.80);
+        
+        // Log for debugging (matching fallback's logging style)
+        if (filteredResults.length > 0) {
+          console.log('[RAG] top matches:', 
+            filteredResults.map(([doc, score]) => ({ 
+              q: doc.pageContent.slice(0, 40) + '…', 
+              score: score.toFixed(2) 
+            }))
+          );
+        } else {
+          console.log('[RAG] no KB match → fallback');
+        }
+        
+        // Return just the documents
+        return filteredResults.map(([doc, _]) => doc);
+      }
+    };
+
     // Create the conversational retrieval chain
     chain = ConversationalRetrievalQAChain.fromLLM(
       llm,
-      vectorStore.asRetriever({
-        k: 8,                     // higher recall
-        searchType: "similarity"  // disable any score threshold
-      }),
+      customRetriever,
       {
         memory: summaryMemory,
         prompt,
@@ -117,13 +140,6 @@ export async function initializeChain() {
           "Use the conversation summary to build one refined search query.\nSummary: {chat_history}\nQuestion: {question}"
       }
     );
-
-    // Add a safe debug listener only if the chain supports .on()
-    if (typeof chain?.on === "function") {
-      chain.on("retrieverEnd", ({ documents }) =>
-        console.debug("[RAG] Top docs:", documents.map(d => d.metadata.id))
-      );
-    }
 
     console.log('✅ LangChain RAG chain initialized successfully');
   } catch (error) {
@@ -173,24 +189,39 @@ export async function smartAnswer(text, memory = {}) {
 
     /* ② run the RAG chain for each question */
     for (const q of questions) {
-      const res = await chain.call({
-        question: q
-      });
-      if (res?.text) answers.push(res.text.trim());
+      try {
+        const res = await chain.call({
+          question: q
+        });
+        if (res?.text && res.text.trim()) {
+          answers.push(res.text.trim());
+        }
+      } catch (err) {
+        console.error(`[LangChain] Error processing sub-question "${q.slice(0, 30)}...":`, err.message);
+        // Continue with other questions
+      }
     }
 
     /* ③ if we have answers, ask GPT-4o to merge them in a marketing tone */
     if (answers.length > 1) {
-      const merged = await llm.call([new HumanMessage(`
-Combine the following answers into one friendly, marketing-oriented Hebrew reply.
-Keep it professional and clear; do **not** mention these bullet separators.
+      try {
+        const merged = await llm.call([new HumanMessage(`
+צרף את התשובות הבאות לתשובה אחת ידידותית ומשווקת בעברית.
+שמור על מקצועיות ובהירות; **אל תזכיר** את הקווים המפרידים האלה.
+חשוב: התשובה צריכה להיות טבעית ולזרום בצורה חלקה.
 
 ---
 ${answers.join("\n---\n")}
 ---
 `)]);
-      console.info("[LangChain] Smart multi-answer generated");
-      return merged.content.trim();
+        console.info("[LangChain] Smart multi-answer generated");
+        const mergedAnswer = merged.content.trim();
+        return mergedAnswer || null;
+      } catch (err) {
+        console.error('[LangChain] Error merging answers:', err.message);
+        // Return the first answer as fallback
+        return answers[0];
+      }
     }
 
     /* If only one answer or no split, return the single answer */
@@ -200,10 +231,20 @@ ${answers.join("\n---\n")}
     }
 
     /* fallback to single-question flow if split detected nothing */
-    const res = await chain.call({ 
-      question: fullText
-    });
-    return res?.text?.trim() || null;
+    try {
+      const res = await chain.call({ 
+        question: fullText
+      });
+      const answer = res?.text?.trim();
+      if (answer) {
+        console.info('[LangChain] Smart answer generated (single question)');
+        return answer;
+      }
+      return null;
+    } catch (err) {
+      console.error('[LangChain] Error in single-question fallback:', err.message);
+      return null;
+    }
 
   } catch (error) {
     console.error('[LangChain] Error generating smart answer:', error.message);
