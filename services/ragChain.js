@@ -228,14 +228,17 @@ export async function smartAnswer(text, memory = {}) {
         // Get top-k=8 results for this specific question
         const results = await vectorStore.similaritySearchWithScore(q, 8);
         
-        // Filter by score threshold 0.80
-        const filteredResults = results.filter(([doc, score]) => score >= 0.80);
+        // Filter by score threshold 0.65 (lowered from 0.80)
+        const filteredResults = results.filter(([doc, score]) => score >= 0.65);
         
         if (filteredResults.length > 0) {
+          // Sort by score in descending order to get the highest match first
+          filteredResults.sort((a, b) => b[1] - a[1]);
+          
           console.log(`[RAG] Found match for "${q.slice(0, 30)}..."`, 
             filteredResults[0][1].toFixed(2));
           
-          // Extract the answer from the best match
+          // Extract the answer from the best match (highest similarity)
           const bestMatch = filteredResults[0][0];
           const content = bestMatch.pageContent;
           // Extract answer part after "A:" or "תשובה:"
@@ -245,14 +248,16 @@ export async function smartAnswer(text, memory = {}) {
           answersData.push({
             question: q,
             answer: answer,
-            hasVectorAnswer: true
+            hasVectorAnswer: true,
+            similarity: filteredResults[0][1] // Store the similarity score
           });
         } else {
           console.log(`[RAG] No match for "${q.slice(0, 30)}..."`);
           answersData.push({
             question: q,
             answer: null,
-            hasVectorAnswer: false
+            hasVectorAnswer: false,
+            similarity: 0
           });
         }
       } catch (err) {
@@ -260,7 +265,8 @@ export async function smartAnswer(text, memory = {}) {
         answersData.push({
           question: q,
           answer: null,
-          hasVectorAnswer: false
+          hasVectorAnswer: false,
+          similarity: 0
         });
       }
     }
@@ -277,15 +283,17 @@ export async function smartAnswer(text, memory = {}) {
         mergePrompt += `פרטי הלקוח:${context}\n\n`;
       }
       
-      // Add questions and answers
-      for (const data of answersData) {
-        mergePrompt += `שאלה: ${data.question}\n`;
-        if (data.hasVectorAnswer) {
-          mergePrompt += `תשובה ממאגר הידע: ${data.answer}\n\n`;
-        } else {
-          mergePrompt += `תשובה ממאגר הידע: לא נמצאה - ענה מהידע הכללי שלך\n\n`;
-        }
-      }
+      // Add questions and answers, sorted by similarity score
+      answersData
+        .sort((a, b) => b.similarity - a.similarity) // Sort by similarity score
+        .forEach(data => {
+          mergePrompt += `שאלה: ${data.question}\n`;
+          if (data.hasVectorAnswer) {
+            mergePrompt += `תשובה ממאגר הידע (דמיון: ${(data.similarity * 100).toFixed(1)}%): ${data.answer}\n\n`;
+          } else {
+            mergePrompt += `תשובה ממאגר הידע: לא נמצאה - ענה מהידע הכללי שלך\n\n`;
+          }
+        });
       
       mergePrompt += `
 הנחיות:
