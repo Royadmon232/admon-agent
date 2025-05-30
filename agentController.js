@@ -3,7 +3,7 @@ import axios from 'axios';
 import { lookupRelevantQAs } from './services/vectorSearch.js';
 import { recall, remember, updateCustomer } from "./services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "./services/salesTemplates.js";
-import { smartAnswer, entityMem } from "./services/ragChain.js";
+import { smartAnswer, summaryMemory } from "./services/ragChain.js";
 import { sendWapp } from './services/twilioService.js';
 
 const EMB_MODEL = "text-embedding-3-small";
@@ -106,73 +106,87 @@ export async function handleMessage(phone, userMsg) {
     // Get memory state
     const memory = await recall(phone);
     
-    // Extract facts from memory (keys that start with 'fact_')
-    const facts = {};
-    for (const [key, value] of Object.entries(memory)) {
-      if (key.startsWith('fact_')) {
-        const factKey = key.substring(5); // Remove 'fact_' prefix
-        facts[factKey] = value;
-      }
-    }
-    
-    // Pre-populate entity memory with persisted facts
-    if (entityMem && Object.keys(facts).length > 0) {
+    // Pre-populate conversation summary if available
+    if (summaryMemory && memory.lastMsg && memory.lastReply) {
       try {
-        await entityMem.saveContext(
-          { input: '' }, 
-          { output: '', entities: facts }
+        // Add previous conversation context to memory
+        await summaryMemory.saveContext(
+          { question: memory.lastMsg },
+          { text: memory.lastReply }
         );
-        console.info(`[Entity Memory] Pre-loaded ${Object.keys(facts).length} facts for ${phone}`);
+        console.info(`[Memory] Pre-loaded conversation context for ${phone}`);
       } catch (err) {
-        console.error('[Entity Memory] Failed to pre-load facts:', err.message);
+        console.error('[Memory] Failed to pre-load context:', err.message);
       }
     }
-    
-    // Extract name if present
-    if (/^(?:אני|שמי)\s+([^\s]+)/i.test(normalizedMsg)) {
-      const name = RegExp.$1;
-      await updateCustomer(phone, { first_name: name });
-    }
-    
-    // Ensure RAG + GPT flow remains intact
-    const intent = intentDetect(normalizedMsg);
-    console.info("[Intent Detected]:", intent);
 
-    // Get response from RAG or sales
-    const answer =
-      await smartAnswer(normalizedMsg, memory)
-      || await semanticLookup(normalizedMsg, memory)
-      || await buildSalesResponse(normalizedMsg, memory);
-    
-    // === CURSOR PATCH START (persist-entities) ===
-    // Persist extracted facts for future turns
-    if (entityMem) {
-      try {
-        const memoryVars = await entityMem.loadMemoryVariables({});
-        const newFacts = memoryVars.entities;
-        if (newFacts && Object.keys(newFacts).length) {
-          // Store each fact as a key-value pair in the existing memory system
-          for (const [key, value] of Object.entries(newFacts)) {
-            await remember(phone, `fact_${key}`, value);
-          }
-          console.info(`[Entity Memory] Persisted ${Object.keys(newFacts).length} facts for ${phone}`);
+    // === CURSOR PATCH START (intent-detection) ===
+    // Smart intent recognition
+    const intent = await intentDetect(normalizedMsg);
+    console.log("[Intent Detection]", intent);
+
+    if (intent.isGreeting) {
+      const answer = await smartAnswer(normalizedMsg, memory);
+      if (answer) {
+        await sendWapp(phone, answer);
+        await remember(phone, 'lastMsg', normalizedMsg);
+        await remember(phone, 'lastReply', answer);
+        console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
+        return;
+      }
+    }
+
+    if (intent.isInsuranceInquiry) {
+      const answer = await smartAnswer(normalizedMsg, memory);
+      if (answer) {
+        await sendWapp(phone, answer);
+        await remember(phone, 'lastMsg', normalizedMsg);
+        await remember(phone, 'lastReply', answer);
+        console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
+        return;
+      }
+    }
+
+    if (intent.isPersonalData) {
+      if (intent.personalInfo) {
+        // Store personal information
+        for (const [key, value] of Object.entries(intent.personalInfo)) {
+          await remember(phone, key, value);
         }
-      } catch (err) {
-        console.error('[Entity Memory] Failed to persist facts:', err.message);
+        console.info("[Personal Data] Stored:", intent.personalInfo);
       }
     }
     // === CURSOR PATCH END ===
-    
-    // Remember the conversation
+
+    let answer = null;
+
+    // Attempt smart answer first
+    answer = await smartAnswer(normalizedMsg, memory);
+    if (answer) {
+      await sendWapp(phone, answer);
+      await remember(phone, 'lastMsg', normalizedMsg);
+      await remember(phone, 'lastReply', answer);
+      console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
+      return;
+    }
+
+    // Fallback to traditional search
+    const searchResults = await lookupRelevantQAs(normalizedMsg);
+    if (searchResults.length > 0) {
+      answer = buildSalesResponse(searchResults[0].answer, memory);
+    } else {
+      answer = "תודה על פנייתך! אני כאן לעזור בכל נושא ביטוח דירות. אנא פרט מה מעניין אותך - כיסוי תכולה, אש, מים, או נושא אחר?";
+    }
+
+    // Send answer and update memory
+    await sendWapp(phone, answer);
     await remember(phone, 'lastMsg', normalizedMsg);
     await remember(phone, 'lastReply', answer);
     console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
 
-    return answer;
   } catch (error) {
-    console.error("Error handling message:", error);
-    const errorMsg = "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
-    return errorMsg;
+    console.error(`[ERROR] Failed to handle message from ${phone}:`, error.message);
+    await sendWapp(phone, "מצטער, נתקלתי בבעיה טכנית. אנא נסה שוב או פנה אלינו מאוחר יותר.");
   }
 }
 

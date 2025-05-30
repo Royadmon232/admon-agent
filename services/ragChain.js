@@ -4,9 +4,7 @@ import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import {
-  ConversationSummaryBufferMemory,
-  ConversationEntityMemory,
-  CombinedMemory
+  ConversationSummaryBufferMemory
 } from "langchain/memory";
 import pg from 'pg';
 import 'dotenv/config';
@@ -71,7 +69,7 @@ console.info("✅ LangChain PromptTemplate initialized with Hebrew insurance con
 
 let vectorStore = null;
 let chain = null;
-let entityMem = null;  // Add this to track entity memory
+let summaryMemory = null;  // Simple memory for conversation context
 
 // Initialize the RAG chain
 export async function initializeChain() {
@@ -94,26 +92,13 @@ export async function initializeChain() {
       }
     );
 
-    // Initialize memory components
-    const summaryMem = new ConversationSummaryBufferMemory({
+    // Initialize simple summary memory
+    summaryMemory = new ConversationSummaryBufferMemory({
       llm,
       maxTokenLimit: 1200,
       memoryKey: 'chat_history',
       inputKey: 'question',
       outputKey: 'text'
-    });
-
-    entityMem = new ConversationEntityMemory({
-      llm,
-      entityExtractionPrompt:
-        "Return as JSON any personal facts (name, phone, address, coverage-type, licence-plate, etc.). If none, return {}.",
-      memoryKey: 'entities',
-      inputKey: 'question',
-      outputKey: 'text'
-    });
-
-    const memory = new CombinedMemory({ 
-      memories: [summaryMem, entityMem] 
     });
 
     // Create the conversational retrieval chain
@@ -124,12 +109,12 @@ export async function initializeChain() {
         searchType: "similarity"  // disable any score threshold
       }),
       {
-        memory,
+        memory: summaryMemory,
         prompt,
         returnSourceDocuments: true,
         verbose: false,
         questionGeneratorTemplate:
-          "Use these facts & summary to build one refined search query.\nFacts: {entities}\nSummary: {chat_history}\nQuestion: {question}"
+          "Use the conversation summary to build one refined search query.\nSummary: {chat_history}\nQuestion: {question}"
       }
     );
 
@@ -227,4 +212,4 @@ ${answers.join("\n---\n")}
 }
 
 // Export entity memory for controller use
-export { entityMem }; 
+export { summaryMemory }; 
