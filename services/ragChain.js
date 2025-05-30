@@ -159,6 +159,39 @@ function splitQuestions(text) {
     .filter(Boolean)
     .slice(0, 5);                              // safety cap at 5
 }
+
+/* ----- helper: Use GPT-4o to intelligently detect and split questions ----- */
+async function intelligentQuestionSplit(text) {
+  try {
+    const response = await llm.call([new HumanMessage(`
+נתח את הטקסט הבא וזהה את כל השאלות הנפרדות שבו.
+החזר רשימה של שאלות נקיות ומדויקות.
+אם יש רק שאלה אחת, החזר אותה ברשימה.
+אל תוסיף שאלות שלא נשאלו.
+
+טקסט:
+${text}
+
+פורמט תשובה:
+1. [שאלה ראשונה]
+2. [שאלה שנייה]
+...
+`)]);
+    
+    // Parse the response to extract questions
+    const content = response.content.trim();
+    const questions = content
+      .split(/\n/)
+      .map(line => line.replace(/^\d+\.\s*/, '').trim())
+      .filter(Boolean);
+    
+    return questions.length > 0 ? questions : [text];
+  } catch (err) {
+    console.error('[GPT-4o] Error in question splitting:', err.message);
+    // Fallback to simple splitting
+    return splitQuestions(text);
+  }
+}
 /* -------------------------------------------------------------------------- */
 
 /**
@@ -183,66 +216,107 @@ export async function smartAnswer(text, memory = {}) {
     // Add context to the text for processing
     const fullText = text + context;
 
-    /* ① break one message into separate questions */
-    const questions = splitQuestions(fullText);
-    const answers   = [];
+    /* ① Use GPT-4o to intelligently detect and split questions */
+    const questions = await intelligentQuestionSplit(fullText);
+    console.info(`[GPT-4o] Detected ${questions.length} question(s)`);
+    
+    const answersData = [];
 
-    /* ② run the RAG chain for each question */
+    /* ② Query vector store for each sub-question */
     for (const q of questions) {
       try {
-        const res = await chain.call({
-          question: q
-        });
-        if (res?.text && res.text.trim()) {
-          answers.push(res.text.trim());
+        // Get top-k=8 results for this specific question
+        const results = await vectorStore.similaritySearchWithScore(q, 8);
+        
+        // Filter by score threshold 0.80
+        const filteredResults = results.filter(([doc, score]) => score >= 0.80);
+        
+        if (filteredResults.length > 0) {
+          console.log(`[RAG] Found match for "${q.slice(0, 30)}..."`, 
+            filteredResults[0][1].toFixed(2));
+          
+          // Extract the answer from the best match
+          const bestMatch = filteredResults[0][0];
+          const content = bestMatch.pageContent;
+          // Extract answer part after "A:" or "תשובה:"
+          const answerMatch = content.match(/(?:A:|תשובה:)\s*(.+)/s);
+          const answer = answerMatch ? answerMatch[1].trim() : content;
+          
+          answersData.push({
+            question: q,
+            answer: answer,
+            hasVectorAnswer: true
+          });
+        } else {
+          console.log(`[RAG] No match for "${q.slice(0, 30)}..."`);
+          answersData.push({
+            question: q,
+            answer: null,
+            hasVectorAnswer: false
+          });
         }
       } catch (err) {
-        console.error(`[LangChain] Error processing sub-question "${q.slice(0, 30)}...":`, err.message);
-        // Continue with other questions
+        console.error(`[RAG] Error querying for "${q.slice(0, 30)}...":`, err.message);
+        answersData.push({
+          question: q,
+          answer: null,
+          hasVectorAnswer: false
+        });
       }
     }
 
-    /* ③ if we have answers, ask GPT-4o to merge them in a marketing tone */
-    if (answers.length > 1) {
-      try {
-        const merged = await llm.call([new HumanMessage(`
-צרף את התשובות הבאות לתשובה אחת ידידותית ומשווקת בעברית.
-שמור על מקצועיות ובהירות; **אל תזכיר** את הקווים המפרידים האלה.
-חשוב: התשובה צריכה להיות טבעית ולזרום בצורה חלקה.
-
----
-${answers.join("\n---\n")}
----
-`)]);
-        console.info("[LangChain] Smart multi-answer generated");
-        const mergedAnswer = merged.content.trim();
-        return mergedAnswer || null;
-      } catch (err) {
-        console.error('[LangChain] Error merging answers:', err.message);
-        // Return the first answer as fallback
-        return answers[0];
-      }
-    }
-
-    /* If only one answer or no split, return the single answer */
-    if (answers.length === 1) {
-      console.info('[LangChain] Smart answer generated');
-      return answers[0];
-    }
-
-    /* fallback to single-question flow if split detected nothing */
+    /* ③ Use GPT-4o to merge answers and fill gaps */
     try {
-      const res = await chain.call({ 
-        question: fullText
-      });
-      const answer = res?.text?.trim();
-      if (answer) {
-        console.info('[LangChain] Smart answer generated (single question)');
-        return answer;
+      let mergePrompt = `אתה דוני, סוכן ביטוח דירות מקצועי וידידותי.
+צור תשובה אחת מקיפה ומקצועית בעברית שמשלבת את כל המידע הבא.
+
+`;
+      
+      // Add context if available
+      if (context) {
+        mergePrompt += `פרטי הלקוח:${context}\n\n`;
       }
+      
+      // Add questions and answers
+      for (const data of answersData) {
+        mergePrompt += `שאלה: ${data.question}\n`;
+        if (data.hasVectorAnswer) {
+          mergePrompt += `תשובה ממאגר הידע: ${data.answer}\n\n`;
+        } else {
+          mergePrompt += `תשובה ממאגר הידע: לא נמצאה - ענה מהידע הכללי שלך\n\n`;
+        }
+      }
+      
+      mergePrompt += `
+הנחיות:
+1. שלב את כל התשובות לתשובה אחת קוהרנטית וזורמת
+2. עבור שאלות ללא תשובה ממאגר הידע - ענה מהידע שלך על ביטוח דירות
+3. השתמש בטון מקצועי, ידידותי ומשווק
+4. התשובה צריכה להיות טבעית ולא להזכיר שהיו מספר שאלות
+5. אורך מקסימלי: 250 מילים
+
+צור תשובה מקצועית ומלאה:`;
+
+      const merged = await llm.call([new HumanMessage(mergePrompt)]);
+      const finalAnswer = merged.content.trim();
+      
+      if (finalAnswer) {
+        console.info("[LangChain] Smart answer generated with GPT-4o enhancement");
+        return finalAnswer;
+      }
+      
+      // Fallback if merge failed
       return null;
+      
     } catch (err) {
-      console.error('[LangChain] Error in single-question fallback:', err.message);
+      console.error('[GPT-4o] Error merging answers:', err.message);
+      
+      // Fallback: try to return any available answer
+      const firstAnswer = answersData.find(d => d.hasVectorAnswer)?.answer;
+      if (firstAnswer) {
+        return firstAnswer;
+      }
+      
       return null;
     }
 
