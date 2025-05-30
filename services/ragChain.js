@@ -3,6 +3,11 @@ import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import {
+  ConversationSummaryBufferMemory,
+  ConversationEntityMemory,
+  CombineMemory
+} from "langchain/memory";
 import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
@@ -37,14 +42,22 @@ const llm = new ChatOpenAI({
 // Custom prompt template for Hebrew insurance responses
 const prompt = new PromptTemplate({
   template: `
-You are Doni, a professional virtual home insurance agent speaking Hebrew.
-Relevant knowledge:
-{context}
+אתה דוני, סוכן ביטוח דירות מנוסה. דבר בעברית חמה ומשכנעת.
 
-Customer's question:
+<ידע רלוונטי>
+{context}
+</ידע רלוונטי>
+
+שאלה:
 {question}
 
-Assume the above content is trustworthy. Respond in Hebrew in a friendly, accurate, and human-like tone. If needed, explain insurance terms simply.
+הנחיות:
+1. פתח במשפט קבלת-פנים אישי (אם יש שם – השתמש בו)
+2. הסבר בבירור את ההבדלים או הכיסויים, כולל דוגמאות
+3. הוסף ערך שיווקי (יתרון ללקוח, קריאה לפעולה)
+4. סיים בקריאה ידידותית
+
+ענֵה עד ‎220‎ מילים.
 `,
   inputVariables: ['context', 'question']
 });
@@ -58,6 +71,7 @@ console.info("✅ LangChain PromptTemplate initialized with Hebrew insurance con
 
 let vectorStore = null;
 let chain = null;
+let entityMem = null;  // Add this to track entity memory
 
 // Initialize the RAG chain
 export async function initializeChain() {
@@ -80,16 +94,42 @@ export async function initializeChain() {
       }
     );
 
+    // Initialize memory components
+    const summaryMem = new ConversationSummaryBufferMemory({
+      llm,
+      maxTokenLimit: 1200,
+      memoryKey: 'chat_history',
+      inputKey: 'question',
+      outputKey: 'text'
+    });
+
+    entityMem = new ConversationEntityMemory({
+      llm,
+      entityExtractionPrompt:
+        "Return as JSON any personal facts (name, phone, address, coverage-type, licence-plate, etc.). If none, return {}.",
+      memoryKey: 'entities',
+      inputKey: 'question',
+      outputKey: 'text'
+    });
+
+    const memory = new CombineMemory({ 
+      memories: [summaryMem, entityMem] 
+    });
+
     // Create the conversational retrieval chain
     chain = ConversationalRetrievalQAChain.fromLLM(
       llm,
       vectorStore.asRetriever({
-        k: 5,
-        searchType: 'similarity'
+        k: 8,                     // higher recall
+        searchType: "similarity"  // disable any score threshold
       }),
       {
+        memory,
         prompt,
-        returnSourceDocuments: true
+        returnSourceDocuments: true,
+        verbose: false,
+        questionGeneratorTemplate:
+          "Use these facts & summary to build one refined search query.\nFacts: {entities}\nSummary: {chat_history}\nQuestion: {question}"
       }
     );
 
@@ -133,16 +173,11 @@ export async function smartAnswer(text, memory = {}) {
   }
 
   try {
-    // Build context from memory
+    // Build context from memory (for backward compatibility)
     let context = '';
     if (memory.firstName) context += ` לקוח בשם ${memory.firstName}.`;
     if (memory.city) context += ` גר בעיר ${memory.city}.`;
     if (memory.homeValue) context += ` ערך דירתו ${memory.homeValue}₪.`;
-
-    // Get chat history from memory (simplified)
-    const chatHistory = [];
-    if (memory.lastMsg)   chatHistory.push(new HumanMessage(memory.lastMsg));
-    if (memory.lastReply) chatHistory.push(new AIMessage(memory.lastReply));
 
     // Add context to the text for processing
     const fullText = text + context;
@@ -154,8 +189,7 @@ export async function smartAnswer(text, memory = {}) {
     /* ② run the RAG chain for each question */
     for (const q of questions) {
       const res = await chain.call({
-        question: q,
-        chat_history: chatHistory
+        question: q
       });
       if (res?.text) answers.push(res.text.trim());
     }
@@ -182,8 +216,7 @@ ${answers.join("\n---\n")}
 
     /* fallback to single-question flow if split detected nothing */
     const res = await chain.call({ 
-      question: fullText, 
-      chat_history: chatHistory 
+      question: fullText
     });
     return res?.text?.trim() || null;
 
@@ -191,4 +224,7 @@ ${answers.join("\n---\n")}
     console.error('[LangChain] Error generating smart answer:', error.message);
     return null;
   }
-} 
+}
+
+// Export entity memory for controller use
+export { entityMem }; 

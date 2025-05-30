@@ -3,7 +3,7 @@ import axios from 'axios';
 import { lookupRelevantQAs } from './services/vectorSearch.js';
 import { recall, remember, updateCustomer } from "./services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "./services/salesTemplates.js";
-import { smartAnswer } from "./services/ragChain.js";
+import { smartAnswer, entityMem } from "./services/ragChain.js";
 import { sendWapp } from './services/twilioService.js';
 
 const EMB_MODEL = "text-embedding-3-small";
@@ -106,6 +106,28 @@ export async function handleMessage(phone, userMsg) {
     // Get memory state
     const memory = await recall(phone);
     
+    // Extract facts from memory (keys that start with 'fact_')
+    const facts = {};
+    for (const [key, value] of Object.entries(memory)) {
+      if (key.startsWith('fact_')) {
+        const factKey = key.substring(5); // Remove 'fact_' prefix
+        facts[factKey] = value;
+      }
+    }
+    
+    // Pre-populate entity memory with persisted facts
+    if (entityMem && Object.keys(facts).length > 0) {
+      try {
+        await entityMem.saveContext(
+          { input: '' }, 
+          { output: '', entities: facts }
+        );
+        console.info(`[Entity Memory] Pre-loaded ${Object.keys(facts).length} facts for ${phone}`);
+      } catch (err) {
+        console.error('[Entity Memory] Failed to pre-load facts:', err.message);
+      }
+    }
+    
     // Extract name if present
     if (/^(?:אני|שמי)\s+([^\s]+)/i.test(normalizedMsg)) {
       const name = RegExp.$1;
@@ -122,11 +144,28 @@ export async function handleMessage(phone, userMsg) {
       || await semanticLookup(normalizedMsg, memory)
       || await buildSalesResponse(normalizedMsg, memory);
     
+    // === CURSOR PATCH START (persist-entities) ===
+    // Persist extracted facts for future turns
+    if (entityMem) {
+      try {
+        const memoryVars = await entityMem.loadMemoryVariables({});
+        const newFacts = memoryVars.entities;
+        if (newFacts && Object.keys(newFacts).length) {
+          // Store each fact as a key-value pair in the existing memory system
+          for (const [key, value] of Object.entries(newFacts)) {
+            await remember(phone, `fact_${key}`, value);
+          }
+          console.info(`[Entity Memory] Persisted ${Object.keys(newFacts).length} facts for ${phone}`);
+        }
+      } catch (err) {
+        console.error('[Entity Memory] Failed to persist facts:', err.message);
+      }
+    }
+    // === CURSOR PATCH END ===
+    
     // Remember the conversation
-    await remember(phone, {
-      lastMsg:   normalizedMsg,
-      lastReply: answer
-    });
+    await remember(phone, 'lastMsg', normalizedMsg);
+    await remember(phone, 'lastReply', answer);
     console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
 
     return answer;
