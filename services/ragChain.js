@@ -9,6 +9,7 @@ import {
 import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
+import { normalize } from '../utils/normalize.js';
 
 console.info("✅ PromptTemplate loaded correctly");
 
@@ -40,7 +41,7 @@ const llm = new ChatOpenAI({
 // Custom prompt template for Hebrew insurance responses
 const prompt = new PromptTemplate({
   template: `
-אתה דוני, סוכן ביטוח דירות מנוסה. דבר בעברית חמה ומשכנעת.
+אתה דוני, סוכן ביטוח דירות מקצועי. דבר בעברית בלבד.
 
 <ידע רלוונטי>
 {context}
@@ -50,10 +51,11 @@ const prompt = new PromptTemplate({
 {question}
 
 הנחיות:
-1. פתח במשפט קבלת-פנים אישי (אם יש שם – השתמש בו)
-2. הסבר בבירור את ההבדלים או הכיסויים, כולל דוגמאות
-3. הוסף ערך שיווקי (יתרון ללקוח, קריאה לפעולה)
-4. סיים בקריאה ידידותית
+1. ענה בעברית בלבד
+2. אל תתחיל עם ברכות קבועות
+3. הסבר בבירור את ההבדלים או הכיסויים
+4. הוסף ערך שיווקי (יתרון ללקוח)
+5. סיים בקריאה ידידותית לפעולה
 
 ענֵה עד ‎220‎ מילים.
 `,
@@ -98,7 +100,8 @@ export async function initializeChain() {
       maxTokenLimit: 1200,
       memoryKey: 'chat_history',
       inputKey: 'question',
-      outputKey: 'text'
+      outputKey: 'text',
+      returnMessages: true
     });
 
     // Custom retriever that matches fallback behavior exactly
@@ -207,6 +210,11 @@ export async function smartAnswer(text, memory = {}) {
   }
 
   try {
+    // Check for greeting intent before any processing
+    if (/^(היי|שלום|צהריים|ערב טוב)/i.test(text.trim())) {
+      return "שלום! אני דוני, סוכן ביטוח דירות. איך אוכל לעזור?";
+    }
+
     // Build context from memory (for backward compatibility)
     let context = '';
     if (memory.firstName) context += ` לקוח בשם ${memory.firstName}.`;
@@ -225,11 +233,18 @@ export async function smartAnswer(text, memory = {}) {
     /* Step 1-3: Query vector store for each sub-question (topK=8, score ≥ 0.65) */
     for (const q of questions) {
       try {
-        // Get top-k=8 results for this specific question
-        const results = await vectorStore.similaritySearchWithScore(q, 8);
+        // Normalize the query before vector search
+        const query = normalize(q);
         
-        // Filter by score threshold 0.65 (matching requested threshold)
+        // Get top-k=8 results for this specific question
+        const results = await vectorStore.similaritySearchWithScore(query, 8);
+        
+        // Filter by score threshold 0.65
         const filteredResults = results.filter(([doc, score]) => score >= 0.65);
+        
+        // Debug log for highest score
+        const highestScore = results.length > 0 ? Math.max(...results.map(([_, score]) => score)) : 0;
+        console.log(`[RAG] Highest score for "${q.slice(0, 30)}...": ${highestScore.toFixed(2)}`);
         
         if (filteredResults.length > 0) {
           // Sort by score in descending order to get the highest match first
@@ -319,7 +334,10 @@ export async function smartAnswer(text, memory = {}) {
         console.debug('[Memory] Could not retrieve chat history:', memErr.message);
       }
       
-      let mergePrompt = `אתה דוני, סוכן ביטוח דירות מקצועי וידידותי.
+      // Check if question is short (≤ 8 words)
+      const isShortQuestion = text.trim().split(/\s+/).length <= 8;
+      
+      let mergePrompt = `אתה דוני, סוכן ביטוח דירות מקצועי.
 צור תשובה אחת מקיפה ומקצועית בעברית בלבד.
 ${chatContext}
 `;
@@ -346,8 +364,8 @@ ${chatContext}
 3. אם הלקוח מתייחס לתשובה קודמת, השתמש בהקשר מההיסטוריה
 4. שלב את כל התשובות לתשובה אחת זורמת וטבעית
 5. עבור שאלות ללא תשובה ממאגר - ענה מידע רלוונטי מהידע שלך
-6. התאם את אורך התשובה לשאלה - שאלה קצרה = תשובה ממוקדת
-7. שמור על טון שיווקי, מקצועי וידידותי
+6. ${isShortQuestion ? 'השאלה קצרה - תן תשובה ממוקדת של עד 80 תווים' : 'תן תשובה מפורטת ושיווקית'}
+7. שמור על טון מקצועי, ידידותי ומשווק
 8. אל תזכיר שהיו מספר שאלות - צור תשובה אחידה
 
 צור תשובה מקצועית:`;
