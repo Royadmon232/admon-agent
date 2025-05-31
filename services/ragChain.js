@@ -107,8 +107,8 @@ export async function initializeChain() {
         // Get top-k=8 results
         const results = await vectorStore.similaritySearchWithScore(query, 8);
         
-        // Filter by score threshold 0.80 (matching fallback's minScore)
-        const filteredResults = results.filter(([doc, score]) => score >= 0.80);
+        // Filter by score threshold 0.65 (matching fallback's requested threshold)
+        const filteredResults = results.filter(([doc, score]) => score >= 0.65);
         
         // Log for debugging (matching fallback's logging style)
         if (filteredResults.length > 0) {
@@ -222,14 +222,14 @@ export async function smartAnswer(text, memory = {}) {
     
     const answersData = [];
 
-    /* Step 1-3: Query vector store for each sub-question (topK=8, score ≥ 0.80) */
+    /* Step 1-3: Query vector store for each sub-question (topK=8, score ≥ 0.65) */
     for (const q of questions) {
       try {
         // Get top-k=8 results for this specific question
         const results = await vectorStore.similaritySearchWithScore(q, 8);
         
-        // Filter by score threshold 0.80 (matching fallback's minScore)
-        const filteredResults = results.filter(([doc, score]) => score >= 0.80);
+        // Filter by score threshold 0.65 (matching requested threshold)
+        const filteredResults = results.filter(([doc, score]) => score >= 0.65);
         
         if (filteredResults.length > 0) {
           // Sort by score in descending order to get the highest match first
@@ -238,7 +238,7 @@ export async function smartAnswer(text, memory = {}) {
           console.log(`[RAG] Found match for "${q.slice(0, 30)}..."`, 
             filteredResults[0][1].toFixed(2));
           
-          // Extract the answer from the best match (highest similarity)
+          // Get only the BEST match (1 match per question as requested)
           const bestMatch = filteredResults[0][0];
           const content = bestMatch.pageContent;
           // Extract answer part after "A:" or "תשובה:"
@@ -252,7 +252,7 @@ export async function smartAnswer(text, memory = {}) {
             similarity: filteredResults[0][1]
           });
         } else {
-          console.log(`[RAG] No match for "${q.slice(0, 30)}..." (below 0.80 threshold)`);
+          console.log(`[RAG] No match for "${q.slice(0, 30)}..." (below 0.65 threshold)`);
           answersData.push({
             question: q,
             answer: null,
@@ -273,28 +273,54 @@ export async function smartAnswer(text, memory = {}) {
 
     /* Step 4: Use GPT-4o to merge answers and fill gaps with chat memory context */
     try {
-      // Get current chat history for context
+      // Check if this is a vague follow-up question
+      const vaguePatterns = [
+        'תסביר שוב', 'עוד פעם', 'לא הבנתי', 'מה זה', 'איזה', 'תוכל להסביר',
+        'explain again', 'what does', 'which', 'tell me more', 'מה אמרת', 'חזור על'
+      ];
+      const isVague = vaguePatterns.some(pattern => text.toLowerCase().includes(pattern));
+      
+      // Get chat history for context
       let chatContext = '';
+      let lastMsg = '';
+      let lastReply = '';
+      
       try {
         // Access chat history from memory buffer
         const memoryVariables = await summaryMemory.chatHistory.getMessages();
         if (memoryVariables && memoryVariables.length > 0) {
-          chatContext = '\n\nהיסטוריית שיחה אחרונה:\n';
-          memoryVariables.slice(-4).forEach((msg) => { // Last 2 exchanges
-            if (msg._getType() === 'human') {
-              chatContext += `לקוח: ${msg.content}\n`;
-            } else if (msg._getType() === 'ai') {
-              chatContext += `סוכן: ${msg.content}\n`;
+          // Get last user message and bot reply
+          for (let i = memoryVariables.length - 1; i >= 0; i--) {
+            const msg = memoryVariables[i];
+            if (msg._getType() === 'ai' && !lastReply) {
+              lastReply = msg.content;
+            } else if (msg._getType() === 'human' && !lastMsg && lastReply) {
+              lastMsg = msg.content;
+              break;
             }
-          });
+          }
+          
+          // If vague, include specific context
+          if (isVague && lastMsg && lastReply) {
+            chatContext = `\n\nהקשר חשוב - הלקוח שאל קודם: "${lastMsg}"\nעניתי: "${lastReply}"\nעכשיו הלקוח שואל: "${text}" - כנראה מתייחס לתשובה הקודמת.\n`;
+          } else if (memoryVariables.length > 2) {
+            // Include general recent history
+            chatContext = '\n\nהיסטוריית שיחה אחרונה:\n';
+            memoryVariables.slice(-4).forEach((msg) => { // Last 2 exchanges
+              if (msg._getType() === 'human') {
+                chatContext += `לקוח: ${msg.content}\n`;
+              } else if (msg._getType() === 'ai') {
+                chatContext += `סוכן: ${msg.content}\n`;
+              }
+            });
+          }
         }
       } catch (memErr) {
-        // If we can't get chat history, continue without it
         console.debug('[Memory] Could not retrieve chat history:', memErr.message);
       }
       
       let mergePrompt = `אתה דוני, סוכן ביטוח דירות מקצועי וידידותי.
-צור תשובה אחת מקיפה ומקצועית בעברית שמשלבת את כל המידע הבא.
+צור תשובה אחת מקיפה ומקצועית בעברית בלבד.
 ${chatContext}
 `;
       
@@ -303,34 +329,34 @@ ${chatContext}
         mergePrompt += `\nפרטי הלקוח:${context}\n\n`;
       }
       
-      // Add questions and answers, sorted by similarity score
-      answersData
-        .sort((a, b) => b.similarity - a.similarity)
-        .forEach(data => {
-          mergePrompt += `שאלה: ${data.question}\n`;
-          if (data.hasVectorAnswer) {
-            mergePrompt += `תשובה ממאגר הידע (דמיון: ${(data.similarity * 100).toFixed(1)}%): ${data.answer}\n\n`;
-          } else {
-            mergePrompt += `תשובה ממאגר הידע: לא נמצאה תשובה רלוונטית (דמיון < 80%) - ענה מהידע הכללי שלך\n\n`;
-          }
-        });
+      // Add questions and answers
+      answersData.forEach(data => {
+        mergePrompt += `שאלה: ${data.question}\n`;
+        if (data.hasVectorAnswer) {
+          mergePrompt += `תשובה ממאגר הידע: ${data.answer}\n\n`;
+        } else {
+          mergePrompt += `תשובה ממאגר הידע: לא נמצאה - ענה מהידע הכללי שלך על ביטוח דירות\n\n`;
+        }
+      });
       
       mergePrompt += `
-הנחיות חשובות:
-1. אם הלקוח מבקש לחזור על משהו או מתייחס לתשובה קודמת, השתמש בהיסטוריית השיחה
-2. שלב את כל התשובות לתשובה אחת קוהרנטית וזורמת
-3. עבור שאלות ללא תשובה ממאגר הידע - ענה מהידע שלך על ביטוח דירות
-4. השתמש בטון מקצועי, ידידותי ומשווק
-5. התשובה צריכה להיות טבעית ולא להזכיר שהיו מספר שאלות
-6. אורך מקסימלי: 250 מילים
+הנחיות קריטיות:
+1. ענה בעברית בלבד - אין להשתמש באנגלית כלל
+2. אל תתחיל עם "שלום, אני דוני" או ברכות קבועות אחרות
+3. אם הלקוח מתייחס לתשובה קודמת, השתמש בהקשר מההיסטוריה
+4. שלב את כל התשובות לתשובה אחת זורמת וטבעית
+5. עבור שאלות ללא תשובה ממאגר - ענה מידע רלוונטי מהידע שלך
+6. התאם את אורך התשובה לשאלה - שאלה קצרה = תשובה ממוקדת
+7. שמור על טון שיווקי, מקצועי וידידותי
+8. אל תזכיר שהיו מספר שאלות - צור תשובה אחידה
 
-צור תשובה מקצועית ומלאה:`;
+צור תשובה מקצועית:`;
 
       const merged = await llm.call([new HumanMessage(mergePrompt)]);
       const finalAnswer = merged.content.trim();
       
-      if (finalAnswer) {
-        console.info("[LangChain] Smart answer generated with GPT-4o enhancement and chat memory");
+      if (finalAnswer && finalAnswer.length > 0) {
+        console.info("[LangChain] Smart answer generated with GPT-4o and memory context");
         
         // Save to memory for future context
         await summaryMemory.saveContext(
@@ -341,7 +367,7 @@ ${chatContext}
         return finalAnswer;
       }
       
-      // Fallback if merge failed
+      // Empty response - return null
       return null;
       
     } catch (err) {
