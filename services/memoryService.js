@@ -1,27 +1,18 @@
 import pg from 'pg';
 import 'dotenv/config';
 
-// Configure PostgreSQL connection pool - prioritize DATABASE_URL for external connections
-const pool = new pg.Pool(
-  process.env.DATABASE_URL 
-    ? { 
-        connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false }
-      }
-    : {
-        user: process.env.PGUSER,
-        host: process.env.PGHOST,
-        database: process.env.PGDATABASE,
-        password: process.env.PGPASSWORD,
-        port: process.env.PGPORT,
-        ssl: { rejectUnauthorized: false }
-      }
-);
+// Configure PostgreSQL connection pool
+const pool = new pg.Pool({
+  user: process.env.PGUSER,
+  host: process.env.PGHOST,
+  database: process.env.PGDATABASE,
+  password: process.env.PGPASSWORD,
+  port: process.env.PGPORT
+});
 
 // Log successful connection
 pool.on('connect', () => {
-  const connectionType = process.env.DATABASE_URL ? 'external DATABASE_URL' : 'individual PG variables';
-  console.info(`✅ PostgreSQL connected successfully for memoryService using ${connectionType}.`);
+  console.info('✅ PostgreSQL connected successfully for memoryService.');
 });
 
 // Ensure tables exist

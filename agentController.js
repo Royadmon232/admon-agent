@@ -3,8 +3,7 @@ import axios from 'axios';
 import { lookupRelevantQAs } from './services/vectorSearch.js';
 import { recall, remember, updateCustomer } from "./services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "./services/salesTemplates.js";
-import { smartAnswer, summaryMemory } from "./services/ragChain.js";
-import { sendWapp } from './services/twilioService.js';
+import { smartAnswer } from "./services/ragChain.js";
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.78;
@@ -98,130 +97,71 @@ export async function semanticLookup(userMsg, memory = {}) {
 // Main message handler
 export async function handleMessage(phone, userMsg) {
   try {
-    console.info(`[DEBUG] Processing message: "${userMsg}" from ${phone}`);
-    
-    // Normalize user message for better pattern matching
-    const normalizedMsg = userMsg.trim();
-    
-    // Get memory state
+    // Extract name if present
+    if (/^(?:אני|שמי)\s+([^\s]+)/i.test(userMsg)) {
+      const name = RegExp.$1;
+      await updateCustomer(phone, { first_name: name });
+    }
+
+    // Get memory and detect intent
     const memory = await recall(phone);
+    console.info("[Memory Loaded]:", memory);
+    const intent = intentDetect(userMsg);
+    console.info("[Intent Detected]:", intent);
     
-    // Pre-populate conversation summary if available
-    if (summaryMemory && memory.lastMsg && memory.lastReply) {
-      try {
-        // Add previous conversation context to memory
-        await summaryMemory.saveContext(
-          { question: memory.lastMsg },
-          { text: memory.lastReply }
-        );
-        console.info(`[Memory] Pre-loaded conversation context for ${phone}`);
-      } catch (err) {
-        console.error('[Memory] Failed to pre-load context:', err.message);
-      }
+    // Get response from RAG or sales
+    const ragAns = await smartAnswer(userMsg, memory) || await semanticLookup(userMsg, memory);
+    console.info("[LangChain RAG used]:", !!ragAns);
+    let reply = ragAns;
+    if (!ragAns) {
+      if (intent === 'lead_gen') reply = buildSalesResponse('lead_gen', memory);
+      else if (intent === 'price_pushback') reply = buildSalesResponse('objection', memory);
+      else if (intent === 'close') reply = buildSalesResponse('close', memory);
+      else reply = buildSalesResponse('default', memory);
+      console.info("[Sales fallback triggered]:", reply);
     }
 
-    // === CURSOR PATCH START (intent-detection) ===
-    // Smart intent recognition
-    const intent = await intentDetect(normalizedMsg);
-    console.log("[Intent Detection]", intent);
+    // Remember the message
+    await remember(phone, 'lastMsg', userMsg);
+    console.info("[Memory Updated] lastMsg saved:", userMsg);
 
-    if (intent.isGreeting) {
-      const answer = await smartAnswer(normalizedMsg, memory);
-      if (answer) {
-        await remember(phone, 'lastMsg', normalizedMsg);
-        await remember(phone, 'lastReply', answer);
-        console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
-        return answer;
-      }
-    }
-
-    if (intent.isInsuranceInquiry) {
-      const answer = await smartAnswer(normalizedMsg, memory);
-      if (answer) {
-        await remember(phone, 'lastMsg', normalizedMsg);
-        await remember(phone, 'lastReply', answer);
-        console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
-        return answer;
-      }
-    }
-
-    if (intent.isPersonalData) {
-      if (intent.personalInfo) {
-        // Store personal information
-        for (const [key, value] of Object.entries(intent.personalInfo)) {
-          await remember(phone, key, value);
-        }
-        console.info("[Personal Data] Stored:", intent.personalInfo);
-      }
-    }
-    // === CURSOR PATCH END ===
-
-    let answer = null;
-
-    // Attempt smart answer first
-    answer = await smartAnswer(normalizedMsg, memory);
-    if (answer) {
-      await remember(phone, 'lastMsg', normalizedMsg);
-      await remember(phone, 'lastReply', answer);
-      console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
-      return answer;
-    }
-
-    // Fallback to traditional search
-    const searchResults = await lookupRelevantQAs(normalizedMsg);
-    if (searchResults.length > 0) {
-      answer = buildSalesResponse(searchResults[0].answer, memory);
-    } else {
-      answer = "תודה על פנייתך! אני כאן לעזור בכל נושא ביטוח דירות. אנא פרט מה מעניין אותך - כיסוי תכולה, אש, מים, או נושא אחר?";
-    }
-
-    // Send answer and update memory
-    await remember(phone, 'lastMsg', normalizedMsg);
-    await remember(phone, 'lastReply', answer);
-    console.info("[Memory Updated] Conversation saved:", { lastMsg: normalizedMsg, lastReply: answer.slice(0, 50) + '...' });
-
-    return answer;
-
+    // Send response via WhatsApp
+    await sendWhatsAppMessage(phone, reply);
+    
+    return reply;
   } catch (error) {
-    console.error(`[ERROR] Failed to handle message from ${phone}:`, error.message);
-    return null;
+    console.error("Error handling message:", error);
+    const errorMsg = "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
+    await sendWhatsAppMessage(phone, errorMsg);
+    return errorMsg;
   }
 }
 
 // WhatsApp message sending function
 export async function sendWhatsAppMessage(to, message) {
-  try {
-    const result = await sendWapp(to, message);
-    if (!result.success) {
-      console.error("Error sending WhatsApp message:", result.error);
-      throw new Error(result.error);
-    }
-  } catch (error) {
-    console.error("Error sending WhatsApp message:", error);
-    throw error;
+  if (!process.env.WHATSAPP_API_TOKEN || !process.env.WHATSAPP_PHONE_NUMBER_ID) {
+    console.error("❌ WhatsApp API configuration missing");
+    return;
   }
-}
 
-// WhatsApp message sending function with quick reply button
-export async function sendWhatsAppMessageWithButton(to, message, buttonTitle, buttonPayload) {
   try {
-    // Format message with button as text since Twilio doesn't support interactive buttons
-    const formattedMessage = `${message}\n\n[${buttonTitle}]`;
-    const result = await sendWapp(to, formattedMessage);
-    
-    if (result.success) {
-      console.log(`✅ Sent WhatsApp message with button to ${to}`);
-    } else {
-      console.error("Error sending WhatsApp message with button:", result.error);
-      // Fallback to regular message
-      console.log("🔄 Falling back to regular message...");
-      await sendWapp(to, `${message}\n\n[${buttonTitle}]`);
-    }
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${process.env.WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      { 
+        messaging_product: "whatsapp", 
+        to: to, 
+        text: { body: message } 
+      },
+      { 
+        headers: { 
+          Authorization: `Bearer ${process.env.WHATSAPP_API_TOKEN}`, 
+          "Content-Type": "application/json" 
+        } 
+      }
+    );
   } catch (error) {
-    console.error("Error sending WhatsApp message with button:", error);
-    // Fallback to regular message
-    console.log("🔄 Falling back to regular message...");
-    await sendWapp(to, `${message}\n\n[${buttonTitle}]`);
+    console.error("Error sending WhatsApp message:", error.response?.data || error.message);
+    throw error;
   }
 }
 
