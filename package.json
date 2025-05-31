@@ -12,6 +12,9 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
   },
   "dependencies": {
+    "@langchain/community": "^0.0.11",
+    "@langchain/core": "^0.3.57",
+    "@langchain/openai": "^0.0.11",
     "axios": "^1.6.7",
     "axios-retry": "^4.5.0",
     "body-parser": "^1.20.2",

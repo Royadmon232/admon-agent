@@ -53,39 +53,18 @@ export async function reindexVectors() {
       columns: {
         idColumnName: 'id',
         vectorColumnName: 'embedding',
-        contentColumnName: 'answer',
-        metadataColumnName: 'metadata'
+        contentColumnName: 'question'
       }
     });
 
-    const { rows } = await client.query(`
-      SELECT id, question, answer, category, complexity
-      FROM   insurance_qa
-    `);
+    const { rows } = await client.query("SELECT id, question FROM insurance_qa");
     console.log(`✅ Found ${rows.length} rows to reindex`);
 
     if (rows.length > 0) {
-      // Filter out rows with null or empty questions
-      const validRows = rows.filter(r => r.question && r.answer);
-      console.log(`✅ ${validRows.length} valid rows with question and answer`);
-
-      const documents = validRows.map(r => ({
-        // 🔑 1️⃣  pageContent now holds both Q & A (better context for GPT)
-        pageContent: `Q: ${r.question}\nA: ${r.answer}`,
-        // 🔑 2️⃣  put searchable text (question) into "embeddingInput"
-        embeddingInput: r.question,      // ⬅️ new helper key
-        metadata: {
-          id: r.id,
-          category: r.category,
-          complexity: r.complexity
-        }
+      const documents = rows.map(row => ({
+        pageContent: row.question
       }));
-
-      // Send custom embeddings (question) while storing full answer context
-      await vectorStore.addVectors(
-        await embeddings.embedDocuments(documents.map(d => d.embeddingInput)),
-        documents.map(({ pageContent, metadata }) => ({ pageContent, metadata }))
-      );
+      await vectorStore.addDocuments(documents);
     }
 
     console.log("✅ Reindexing completed successfully.");

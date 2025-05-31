@@ -1,18 +1,25 @@
 import { ConversationalRetrievalQAChain } from 'langchain/chains';
-import { ChatOpenAI } from 'langchain/chat_models/openai';
-import { OpenAIEmbeddings } from 'langchain/embeddings/openai';
-import { PGVectorStore } from 'langchain/vectorstores/pgvector';
-import { PromptTemplate } from 'langchain/prompts';
+import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
+import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
+import { PromptTemplate } from '@langchain/core/prompts';
+import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import pg from 'pg';
 import 'dotenv/config';
+import kbConfig from '../src/insuranceKbConfig.js';
 
-// Initialize PostgreSQL pool
-const pool = new pg.Pool({
-  user: process.env.PGUSER,
-  host: process.env.PGHOST,
-  database: process.env.PGDATABASE,
-  password: process.env.PGPASSWORD,
-  port: process.env.PGPORT
+console.info("✅ PromptTemplate loaded correctly");
+
+// Initialize PostgreSQL pool - prioritize DATABASE_URL for external connections
+const pool = new pg.Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+// Log successful connection
+pool.on('connect', () => {
+  console.info('✅ LangChain DB connection established using external DATABASE_URL with SSL');
 });
 
 // Initialize OpenAI components
@@ -28,39 +35,47 @@ const llm = new ChatOpenAI({
 });
 
 // Custom prompt template for Hebrew insurance responses
-const qaPrompt = PromptTemplate.fromTemplate(`
+const prompt = new PromptTemplate({
+  template: `
 אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. דבר בעברית בגוף ראשון.
-
 הקשר: {context}
-
 שאלה: {question}
 
-תן תשובה מקצועית, ידידותית ומקיפה בעברית. התייחס ישירות לשאלה וכלול את כל המידע הרלוונטי.
-`);
+תן תשובה מקצועית, ידידותית ומקיפה בעברית. התייחס לשאלה וכולל את כל המידע הרלוונטי.
+`,
+  inputVariables: ['context', 'question']
+});
+
+if (!(prompt instanceof PromptTemplate)) {
+  console.error("❌ LangChain prompt template initialization failed: invalid template type");
+  throw new Error("Prompt must be a valid instance of PromptTemplate");
+}
+
+console.info("✅ LangChain PromptTemplate initialized with Hebrew insurance context");
 
 let vectorStore = null;
 let chain = null;
 
 // Initialize the RAG chain
-async function initializeChain() {
+export async function initializeChain() {
   try {
-    // Initialize PGVector store
-    vectorStore = await PGVectorStore.initialize(embeddings, {
-      postgresConnectionOptions: {
-        user: process.env.PGUSER,
-        host: process.env.PGHOST,
-        database: process.env.PGDATABASE,
-        password: process.env.PGPASSWORD,
-        port: process.env.PGPORT
-      },
-      tableName: 'insurance_qa',
-      columns: {
-        idColumnName: 'id',
-        vectorColumnName: 'embedding',
-        contentColumnName: 'question',
-        metadataColumnName: 'metadata'
+    // Initialize PGVector store using external DATABASE_URL
+    vectorStore = await PGVectorStore.initialize(
+      embeddings,
+      {
+        postgresConnectionOptions: {
+          connectionString: process.env.DATABASE_URL,
+          ssl: { rejectUnauthorized: false }
+        },
+        tableName: kbConfig.tableName,
+        columns: {
+          idColumnName: kbConfig.idColumnName ?? 'id',
+          vectorColumnName: kbConfig.embeddingColumnName,
+          contentColumnName: kbConfig.contentColumnName
+          
+        }
       }
-    });
+    );
 
     // Create the conversational retrieval chain
     chain = ConversationalRetrievalQAChain.fromLLM(
@@ -70,7 +85,7 @@ async function initializeChain() {
         searchType: 'similarity'
       }),
       {
-        qaTemplate: qaPrompt,
+        prompt,
         returnSourceDocuments: true
       }
     );
@@ -83,7 +98,7 @@ async function initializeChain() {
 }
 
 // Initialize on module load
-initializeChain();
+// initializeChain(); // Commented out - now called from index.js
 
 /**
  * Get smart answer using LangChain RAG
@@ -105,10 +120,9 @@ export async function smartAnswer(text, memory = {}) {
     if (memory.homeValue) context += ` ערך דירתו ${memory.homeValue}₪.`;
 
     // Get chat history from memory (simplified)
-    const chatHistory = memory.lastMsg ? [
-      { role: 'human', content: memory.lastMsg },
-      { role: 'ai', content: 'הבנתי' }
-    ] : [];
+    const chatHistory = [];
+    if (memory.lastMsg)   chatHistory.push(new HumanMessage(memory.lastMsg));
+    if (memory.lastReply) chatHistory.push(new AIMessage(memory.lastReply));
 
     // Query the chain
     const response = await chain.call({

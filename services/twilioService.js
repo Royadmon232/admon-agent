@@ -22,7 +22,12 @@ if (accountSid && authToken) {
 const queue = new PQueue({ concurrency: 5 });
 
 // === Delivery Log Setup ===
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new pg.Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 
 // Ensure delivery_log table exists
 (async () => {
@@ -36,6 +41,7 @@ const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
       ts TIMESTAMPTZ DEFAULT now()
     );`);
     console.log('[twilioService] ✅ delivery_log table ready');
+    console.info('✅ TwilioService connected to DB with SSL');
   } catch (err) {
     console.error('[twilioService] ⚠️  Failed to ensure delivery_log table:', err.message);
   }
@@ -56,10 +62,30 @@ async function sendMessageWithRetryAndQueue(messagePayload, recipientInfo) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       // Add the client.messages.create call to the queue
-      const message = await queue.add(() => client.messages.create(messagePayload));
+      const message = await queue.add(() => {
+        try {
+          return client.messages.create(messagePayload);
+        } catch (err) {
+          if (err.code === 63038) {
+            console.warn('[Twilio] Sandbox daily-limit hit');
+            return { limited: true };
+          }
+          throw err;
+        }
+      });
+      
+      if (message && message.limited) {
+        console.log(`Attempt ${attempt}: Daily limit reached for ${recipientInfo}`);
+        return { limited: true };
+      }
+      
       console.log(`Attempt ${attempt}: Successfully sent ${recipientInfo}. SID: ${message.sid}`);
       return message; // Success
     } catch (error) {
+      if (error.code === 63038) {              // Sandbox daily-limit hit
+        console.warn('[Twilio] Daily Sandbox limit reached – skipping retries');
+        return { limited: true };
+      }
       lastError = error;
       console.warn(`Attempt ${attempt}: Failed to send ${recipientInfo}. Error: ${error.message}`);
       if (attempt < 3) {
@@ -110,6 +136,11 @@ async function sendWapp(to, body, mediaUrl = null) {
 
   try {
     const message = await sendMessageWithRetryAndQueue(messageData, `WhatsApp to ${to}`);
+    if (message === null) {
+      // Daily limit hit
+      await logDelivery('daily_limit_reached', 'whatsapp');
+      return { success: false, error: 'Daily message limit reached' };
+    }
     console.log(`✅ WhatsApp message sent to ${to}. SID: ${message.sid}`); // Final success log
     await logDelivery('success', 'whatsapp');
     return { success: true, sid: message.sid };
@@ -132,8 +163,8 @@ async function smsFallback(to, body) {
     return { success: false, error: 'Twilio client not initialized.' };
   }
   if (!smsServiceSid) {
-    console.warn('⚠️ TWILIO_SMS_SID is not configured. SMS fallback disabled.');
-    return { success: false, error: 'SMS fallback service (TWILIO_SMS_SID) not configured.' };
+    console.warn('[Twilio] SMS fallback skipped – TWILIO_SMS_SID missing');
+    return { smsSkipped: true };
   }
   if (!to || !body) {
     console.error('❌ "to" and "body" are required for sending SMS message.');
@@ -148,6 +179,10 @@ async function smsFallback(to, body) {
 
   try {
     const message = await sendMessageWithRetryAndQueue(messageData, `SMS fallback to ${to}`);
+    if (message && message.limited) {
+      await logDelivery('daily_limit_reached', 'sms');
+      return { success: false, error: 'Daily message limit reached' };
+    }
     console.log(`✅ SMS fallback sent to ${to}. SID: ${message.sid}`); // Final success log
     await logDelivery('success', 'sms');
     return { success: true, sid: message.sid };

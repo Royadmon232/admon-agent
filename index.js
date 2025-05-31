@@ -1,4 +1,6 @@
 import 'dotenv/config';  // ensures DATABASE_URL loaded
+import "./vectorIndexer.js";
+import { initializeChain } from './services/ragChain.js';
 
 /*
 ============================
@@ -26,7 +28,7 @@ import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
 import fs from "fs";
-import { semanticLookup, sendWhatsAppMessage } from './agentController.js';
+import { handleMessage, sendWhatsAppMessage } from './agentController.js';
 import { sendWapp, smsFallback } from "./services/twilioService.js";
 
 const app = express();
@@ -273,7 +275,7 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
   // Path 3: Primary RAG / Quote Intent Detection
   if (userSessionData[fromId].stage === undefined) {
     // Try FAQ RAG first
-    let faqAnswer = await semanticLookup(clean);
+    let faqAnswer = await handleMessage(clean);
 
     if (faqAnswer) {
       replyToSend = faqAnswer;
@@ -287,7 +289,7 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
       if (!simulateMode) {
         await sendWhatsAppMessage(fromId, replyToSend);
       }
-      return;
+      return;   // stop here – avoid fallback duplicates
     }
 
     // If not FAQ but text shows quote intent → init questionnaire
@@ -344,26 +346,6 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
     if (simulateMode) return replyToSend;
     else return;
   }
-  
-  // If no other path handled the message, use semantic lookup
-  replyToSend = await semanticLookup(clean);
-  if (!replyToSend) {
-    replyToSend = "מצטער, לא הצלחתי לעבד את בקשתך כרגע. נסה שוב מאוחר יותר.";
-  }
-  
-  conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
-  if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
-    conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
-  }
-  
-  if (!simulateMode && replyToSend) {
-    console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend}`);
-    await sendWhatsAppMessage(fromId, replyToSend);
-  }
-
-  if (simulateMode) {
-    return replyToSend;
-  }
 }
 
 // =============================
@@ -395,7 +377,7 @@ app.post('/simulate', async (req, res) => {
     const text = req.body?.text;
     if (!text) return res.status(400).json({ answer: 'הודעה ריקה התקבלה.' });
 
-    const answer = await semanticLookup(text);
+    const answer = await handleMessage(text);
     
     if (answer) {
       res.json({ answer: answer });
@@ -473,11 +455,11 @@ app.post('/twilio/webhook', async (req, res) => {
   const senderPhone = senderPhoneWithPrefix.replace(/^whatsapp:/i, '');
 
   try {
-    const botResponse = await semanticLookup(messageText);
+    const botResponse = await handleMessage(senderPhone, messageText);
 
     if (!botResponse || typeof botResponse !== 'string' || botResponse.startsWith("מצטער, אירעה שגיאה")) {
-      console.error(`[Twilio] Failed to get valid response from semanticLookup for: "${messageText}". Response: ${botResponse}`);
-      // Optionally, send a generic error message back to the user if semanticLookup failed
+      console.error(`[Twilio] Failed to get valid response from handleMessage for: "${messageText}". Response: ${botResponse}`);
+      // Optionally, send a generic error message back to the user if handleMessage failed
       // For now, just return 500 as the original plan was to return 500 on failure to get bot response
       return res.status(500).send('Failed to get bot response.');
     }
@@ -507,9 +489,12 @@ app.post('/twilio/webhook', async (req, res) => {
 });
 
 // =============================
-// 5. Start the Express server
+// Bootstrap & Server Start
 // =============================
 const PORT = process.env.PORT || 3000;
+
+await initializeChain();     // creates table if missing
+
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server is running on port ${PORT}`);
 });

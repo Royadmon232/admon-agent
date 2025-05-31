@@ -1,17 +1,13 @@
 import 'dotenv/config';
-import { Pool } from 'pg';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { normalize } from '../utils/normalize.js';
 import { getEmbedding } from '../utils/embeddingUtils.js';
+import pool from '../utils/dbPool.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
 
 const KNOWLEDGE_FILE_PATH = path.join(__dirname, '../insurance_knowledge.json');
 const EMBEDDING_VECTOR_DIMENSION = 1536; // text-embedding-3-small produces 1536 dimensions
@@ -22,20 +18,20 @@ async function seedEmbeddings() {
     client = await pool.connect();
     console.log('Successfully connected to the database.');
 
-    // PHASE-2: Create extension and table
+    // Create extension and table
     await client.query('CREATE EXTENSION IF NOT EXISTS vector');
-    await client.query(`CREATE TABLE IF NOT EXISTS insurance_qa(
-        id SERIAL PRIMARY KEY,
-        question TEXT,
-        answer   TEXT,
-        embedding vector(1536)
+    await client.query(`CREATE TABLE IF NOT EXISTS insurance_qa (
+      id SERIAL PRIMARY KEY,
+      question TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      embedding vector(1536)
     );`);
     console.log('[seed] table ready');
 
     // Load insurance knowledge base
     const rawData = await fs.readFile(KNOWLEDGE_FILE_PATH, 'utf8');
     const knowledgeBase = JSON.parse(rawData);
-    const qas = knowledgeBase.insurance_home_il_qa; // Assuming this is the array of Q&A pairs
+    const qas = knowledgeBase.insurance_home_il_qa;
 
     if (!qas || !Array.isArray(qas)) {
       console.error('Could not find Q&A array in insurance_knowledge.json');
@@ -52,12 +48,11 @@ async function seedEmbeddings() {
         continue;
       }
 
-      // Check if question already exists (using original question text)
+      // Check if question already exists
       const checkQuery = 'SELECT id FROM insurance_qa WHERE question = $1';
       const { rows: existingRows } = await client.query(checkQuery, [originalQuestion]);
 
       if (existingRows.length > 0) {
-        // console.log(`Question already exists, skipping: "${originalQuestion.substring(0,50)}..."`);
         continue;
       }
 
