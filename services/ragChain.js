@@ -6,6 +6,7 @@ import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
+import { normalize } from "../utils/normalize.js";
 
 console.info("✅ PromptTemplate loaded correctly");
 
@@ -102,31 +103,39 @@ export async function initializeChain() {
 
 /**
  * Get smart answer using LangChain RAG
- * @param {string} text - User question
- * @param {object} memory - User memory context
+ * @param {string} question - User question
+ * @param {string} context - User context
  * @returns {Promise<string|null>} Answer or null if not available
  */
-export async function smartAnswer(text, memory = {}) {
+export async function smartAnswer(question, context) {
   if (!chain) {
     console.warn('[LangChain] Chain not initialized, skipping');
     return null;
   }
 
   try {
+    // Normalize the question
+    const query = normalize(question);
+    
+    // Get relevant documents
+    const results = await vectorStore.similaritySearchWithScore(
+      query, 8, { minScore: 0.65 }
+    );
+
     // Build context from memory
     let context = '';
-    if (memory.firstName) context += ` לקוח בשם ${memory.firstName}.`;
-    if (memory.city) context += ` גר בעיר ${memory.city}.`;
-    if (memory.homeValue) context += ` ערך דירתו ${memory.homeValue}₪.`;
+    if (context.firstName) context += ` לקוח בשם ${context.firstName}.`;
+    if (context.city) context += ` גר בעיר ${context.city}.`;
+    if (context.homeValue) context += ` ערך דירתו ${context.homeValue}₪.`;
 
     // Get chat history from memory (simplified)
     const chatHistory = [];
-    if (memory.lastMsg)   chatHistory.push(new HumanMessage(memory.lastMsg));
-    if (memory.lastReply) chatHistory.push(new AIMessage(memory.lastReply));
+    if (context.lastMsg)   chatHistory.push(new HumanMessage(context.lastMsg));
+    if (context.lastReply) chatHistory.push(new AIMessage(context.lastReply));
 
     // Query the chain
     const response = await chain.call({
-      question: text + context,
+      question: query + context,
       chat_history: chatHistory
     });
 
