@@ -201,8 +201,8 @@ ${text}
  * @returns {Promise<string|null>} Answer or null if not available
  */
 export async function smartAnswer(text, memory = {}) {
-  if (!chain) {
-    console.warn('[LangChain] Chain not initialized, skipping');
+  if (!chain || !vectorStore) {
+    console.warn('[LangChain] Chain or vectorStore not initialized, skipping');
     return null;
   }
 
@@ -216,20 +216,20 @@ export async function smartAnswer(text, memory = {}) {
     // Add context to the text for processing
     const fullText = text + context;
 
-    /* ① Use GPT-4o to intelligently detect and split questions */
+    /* Step 0: Use GPT-4o to intelligently detect and split questions */
     const questions = await intelligentQuestionSplit(fullText);
     console.info(`[GPT-4o] Detected ${questions.length} question(s)`);
     
     const answersData = [];
 
-    /* ② Query vector store for each sub-question */
+    /* Step 1-3: Query vector store for each sub-question (topK=8, score ≥ 0.80) */
     for (const q of questions) {
       try {
         // Get top-k=8 results for this specific question
         const results = await vectorStore.similaritySearchWithScore(q, 8);
         
-        // Filter by score threshold 0.65 (lowered from 0.80)
-        const filteredResults = results.filter(([doc, score]) => score >= 0.65);
+        // Filter by score threshold 0.80 (matching fallback's minScore)
+        const filteredResults = results.filter(([doc, score]) => score >= 0.80);
         
         if (filteredResults.length > 0) {
           // Sort by score in descending order to get the highest match first
@@ -249,10 +249,10 @@ export async function smartAnswer(text, memory = {}) {
             question: q,
             answer: answer,
             hasVectorAnswer: true,
-            similarity: filteredResults[0][1] // Store the similarity score
+            similarity: filteredResults[0][1]
           });
         } else {
-          console.log(`[RAG] No match for "${q.slice(0, 30)}..."`);
+          console.log(`[RAG] No match for "${q.slice(0, 30)}..." (below 0.80 threshold)`);
           answersData.push({
             question: q,
             answer: null,
@@ -271,37 +271,58 @@ export async function smartAnswer(text, memory = {}) {
       }
     }
 
-    /* ③ Use GPT-4o to merge answers and fill gaps */
+    /* Step 4: Use GPT-4o to merge answers and fill gaps with chat memory context */
     try {
+      // Get current chat history for context
+      let chatContext = '';
+      try {
+        // Access chat history from memory buffer
+        const memoryVariables = await summaryMemory.chatHistory.getMessages();
+        if (memoryVariables && memoryVariables.length > 0) {
+          chatContext = '\n\nהיסטוריית שיחה אחרונה:\n';
+          memoryVariables.slice(-4).forEach((msg) => { // Last 2 exchanges
+            if (msg._getType() === 'human') {
+              chatContext += `לקוח: ${msg.content}\n`;
+            } else if (msg._getType() === 'ai') {
+              chatContext += `סוכן: ${msg.content}\n`;
+            }
+          });
+        }
+      } catch (memErr) {
+        // If we can't get chat history, continue without it
+        console.debug('[Memory] Could not retrieve chat history:', memErr.message);
+      }
+      
       let mergePrompt = `אתה דוני, סוכן ביטוח דירות מקצועי וידידותי.
 צור תשובה אחת מקיפה ומקצועית בעברית שמשלבת את כל המידע הבא.
-
+${chatContext}
 `;
       
-      // Add context if available
+      // Add user context if available
       if (context) {
-        mergePrompt += `פרטי הלקוח:${context}\n\n`;
+        mergePrompt += `\nפרטי הלקוח:${context}\n\n`;
       }
       
       // Add questions and answers, sorted by similarity score
       answersData
-        .sort((a, b) => b.similarity - a.similarity) // Sort by similarity score
+        .sort((a, b) => b.similarity - a.similarity)
         .forEach(data => {
           mergePrompt += `שאלה: ${data.question}\n`;
           if (data.hasVectorAnswer) {
             mergePrompt += `תשובה ממאגר הידע (דמיון: ${(data.similarity * 100).toFixed(1)}%): ${data.answer}\n\n`;
           } else {
-            mergePrompt += `תשובה ממאגר הידע: לא נמצאה - ענה מהידע הכללי שלך\n\n`;
+            mergePrompt += `תשובה ממאגר הידע: לא נמצאה תשובה רלוונטית (דמיון < 80%) - ענה מהידע הכללי שלך\n\n`;
           }
         });
       
       mergePrompt += `
-הנחיות:
-1. שלב את כל התשובות לתשובה אחת קוהרנטית וזורמת
-2. עבור שאלות ללא תשובה ממאגר הידע - ענה מהידע שלך על ביטוח דירות
-3. השתמש בטון מקצועי, ידידותי ומשווק
-4. התשובה צריכה להיות טבעית ולא להזכיר שהיו מספר שאלות
-5. אורך מקסימלי: 250 מילים
+הנחיות חשובות:
+1. אם הלקוח מבקש לחזור על משהו או מתייחס לתשובה קודמת, השתמש בהיסטוריית השיחה
+2. שלב את כל התשובות לתשובה אחת קוהרנטית וזורמת
+3. עבור שאלות ללא תשובה ממאגר הידע - ענה מהידע שלך על ביטוח דירות
+4. השתמש בטון מקצועי, ידידותי ומשווק
+5. התשובה צריכה להיות טבעית ולא להזכיר שהיו מספר שאלות
+6. אורך מקסימלי: 250 מילים
 
 צור תשובה מקצועית ומלאה:`;
 
@@ -309,7 +330,14 @@ export async function smartAnswer(text, memory = {}) {
       const finalAnswer = merged.content.trim();
       
       if (finalAnswer) {
-        console.info("[LangChain] Smart answer generated with GPT-4o enhancement");
+        console.info("[LangChain] Smart answer generated with GPT-4o enhancement and chat memory");
+        
+        // Save to memory for future context
+        await summaryMemory.saveContext(
+          { question: text },
+          { text: finalAnswer }
+        );
+        
         return finalAnswer;
       }
       
@@ -322,6 +350,11 @@ export async function smartAnswer(text, memory = {}) {
       // Fallback: try to return any available answer
       const firstAnswer = answersData.find(d => d.hasVectorAnswer)?.answer;
       if (firstAnswer) {
+        // Save to memory even for fallback
+        await summaryMemory.saveContext(
+          { question: text },
+          { text: firstAnswer }
+        );
         return firstAnswer;
       }
       
