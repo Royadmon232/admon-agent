@@ -204,6 +204,11 @@ ${text}
  * @returns {Promise<string|null>} Answer or null if not available
  */
 export async function smartAnswer(text, memory = {}) {
+  // LangChain disabled - always use fallback
+  return null;
+  
+  // Original code below is disabled
+  /*
   if (!chain || !vectorStore) {
     console.warn('[LangChain] Chain or vectorStore not initialized, skipping');
     return null;
@@ -224,13 +229,13 @@ export async function smartAnswer(text, memory = {}) {
     // Add context to the text for processing
     const fullText = text + context;
 
-    /* Step 0: Use GPT-4o to intelligently detect and split questions */
+    // Step 0: Use GPT-4o to intelligently detect and split questions
     const questions = await intelligentQuestionSplit(fullText);
     console.info(`[GPT-4o] Detected ${questions.length} question(s)`);
     
     const answersData = [];
 
-    /* Step 1-3: Query vector store for each sub-question (topK=8, score ≥ 0.65) */
+    // Step 1-3: Query vector store for each sub-question (topK=8, score ≥ 0.65)
     for (const q of questions) {
       try {
         // Normalize the query before vector search
@@ -286,7 +291,7 @@ export async function smartAnswer(text, memory = {}) {
       }
     }
 
-    /* Step 4: Use GPT-4o to merge answers and fill gaps with chat memory context */
+    // Step 4: Use GPT-4o to merge answers and fill gaps with chat memory context
     try {
       // Check if this is a vague follow-up question
       const vaguePatterns = [
@@ -409,6 +414,7 @@ ${chatContext}
     console.error('[LangChain] Error generating smart answer:', error.message);
     return null;
   }
+  */
 }
 
 // Export entity memory for controller use

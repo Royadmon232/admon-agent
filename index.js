@@ -1,6 +1,6 @@
 import 'dotenv/config';  // ensures DATABASE_URL loaded
 import "./vectorIndexer.js";
-import { initializeChain } from './services/ragChain.js';
+// import { initializeChain } from './services/ragChain.js'; // LangChain disabled - using fallback only
 
 /*
 ============================
@@ -493,7 +493,7 @@ app.post('/twilio/webhook', async (req, res) => {
 // =============================
 const PORT = process.env.PORT || 3000;
 
-await initializeChain();     // creates table if missing
+// await initializeChain();     // LangChain disabled - using fallback only
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
