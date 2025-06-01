@@ -123,10 +123,10 @@ export async function smartAnswer(question, context) {
     );
 
     // Build context from memory
-    let context = '';
-    if (context.firstName) context += ` לקוח בשם ${context.firstName}.`;
-    if (context.city) context += ` גר בעיר ${context.city}.`;
-    if (context.homeValue) context += ` ערך דירתו ${context.homeValue}₪.`;
+    let contextStr = '';
+    if (context.firstName) contextStr += ` לקוח בשם ${context.firstName}.`;
+    if (context.city) contextStr += ` גר בעיר ${context.city}.`;
+    if (context.homeValue) contextStr += ` ערך דירתו ${context.homeValue}₪.`;
 
     // Get chat history from memory (simplified)
     const chatHistory = [];
@@ -135,7 +135,7 @@ export async function smartAnswer(question, context) {
 
     // Query the chain
     const response = await chain.call({
-      question: query + context,
+      question: query + contextStr,
       chat_history: chatHistory
     });
 
