@@ -40,11 +40,11 @@ function buildContext(memory) {
   if (memory.homeValue) ctx += ` ערך דירתו ${memory.homeValue}₪.`;
   return ctx;
 }
-
+//+ context
 export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.60, memory = {}) {
   const context = buildContext(memory);
   console.info("[Context built]:", context);
-  const emb = await getEmbedding(normalize(userQuestion + context));
+  const emb = await getEmbedding(normalize(userQuestion ));
   try {
     const { rows } = await pool.query(
       `SELECT question, answer, 1 - (embedding <=> $1) AS score
