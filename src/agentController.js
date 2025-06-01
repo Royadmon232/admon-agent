@@ -127,11 +127,6 @@ export async function handleMessage(phone, userMsg) {
       || await semanticLookup(normalizedMsg, memory)
       || await buildSalesResponse(normalizedMsg, memory);
     
-    // Add preview assignment with null check
-    const match = semanticLookup(normalizedMsg, KNOWLEDGE);
-    const preview = match ? match.slice(0, 40) : "";
-    if (!match) console.warn("[semanticLookup] No FAQ match found");
-    
     // Remember the message
     await remember(phone, 'lastMsg', normalizedMsg);
     console.info("[Memory Updated] lastMsg saved:", normalizedMsg);
