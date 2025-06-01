@@ -28,7 +28,7 @@ import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
 import fs from "fs";
-import { handleMessage, sendWhatsAppMessage } from './agentController.js';
+import { handleMessage, sendWhatsAppMessage } from './src/agentController.js';
 import { sendWapp, smsFallback } from "./services/twilioService.js";
 
 const app = express();
