@@ -44,15 +44,11 @@ function buildContext(memory) {
 export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.60, memory = {}) {
   const context = buildContext(memory);
   console.info("[Context built]:", context);
-  
-  // Properly combine question and context with separation
-  const queryText = context ? `${userQuestion}. ${context}` : userQuestion;
-  const emb = await getEmbedding(normalize(queryText));
-  
+  const emb = await getEmbedding(normalize(userQuestion + context));
   try {
     const { rows } = await pool.query(
       `SELECT question, answer, 1 - (embedding <=> $1) AS score
-       FROM insurance_qa ORDER BY embedding <=> $1 LIMIT $2`, [emb, topK]);
+       FROM insurance_qa ORDER BY embedding <=> $1 LIMIT $2`, [JSON.stringify(emb), topK]);
     return rows.filter(r => r.score >= minScore);
   } catch (err) {
     if (err.code === '42P01') { // undefined_table error
