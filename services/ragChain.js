@@ -1,7 +1,8 @@
-import { ConversationalRetrievalQAChain } from 'langchain/chains';
+import { createRetrievalChain } from 'langchain/chains/retrieval';
+import { createStuffDocumentsChain } from 'langchain/chains/combine_documents';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
-import { PromptTemplate } from '@langchain/core/prompts';
+import { PromptTemplate, ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import pg from 'pg';
 import 'dotenv/config';
@@ -35,25 +36,6 @@ const llm = new ChatOpenAI({
   temperature: 0.7
 });
 
-// Custom prompt template for Hebrew insurance responses
-const prompt = new PromptTemplate({
-  template: `
-אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. דבר בעברית בגוף ראשון.
-הקשר: {context}
-שאלה: {question}
-
-תן תשובה מקצועית, ידידותית ומקיפה בעברית. התייחס לשאלה וכולל את כל המידע הרלוונטי.
-`,
-  inputVariables: ['context', 'question']
-});
-
-if (!(prompt instanceof PromptTemplate)) {
-  console.error("❌ LangChain prompt template initialization failed: invalid template type");
-  throw new Error("Prompt must be a valid instance of PromptTemplate");
-}
-
-console.info("✅ LangChain PromptTemplate initialized with Hebrew insurance context");
-
 let vectorStore = null;
 let chain = null;
 
@@ -78,21 +60,32 @@ export async function initializeChain() {
       }
     );
 
-    // Create the conversational retrieval chain
-    chain = ConversationalRetrievalQAChain.fromLLM(
+    // Create modern prompt template
+    const chatPrompt = ChatPromptTemplate.fromTemplate(`
+אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. דבר בעברית בגוף ראשון.
+הקשר: {context}
+שאלה: {input}
+
+תן תשובה מקצועית, ידידותית ומקיפה בעברית. התייחס לשאלה וכולל את כל המידע הרלוונטי.
+`);
+
+    // Create document chain
+    const documentChain = await createStuffDocumentsChain({
       llm,
-      vectorStore.asRetriever({
+      prompt: chatPrompt
+    });
+
+    // Create the conversational retrieval chain
+    chain = await createRetrievalChain({
+      combineDocsChain: documentChain,
+      retriever: vectorStore.asRetriever({
         k: 8,
         searchType: 'similarity',
         searchKwargs: {
-          minScore: 0.65  // Use this threshold explicitly
+          minScore: 0.60  // Explicitly set threshold to 0.60 to allow more results
         }
-      }),
-      {
-        prompt,
-        returnSourceDocuments: true
-      }
-    );
+      })
+    });
 
     console.log('✅ LangChain RAG chain initialized successfully');
   } catch (error) {
@@ -123,23 +116,17 @@ export async function smartAnswer(text, memory = {}) {
     if (memory.city) context += ` גר בעיר ${memory.city}.`;
     if (memory.homeValue) context += ` ערך דירתו ${memory.homeValue}₪.`;
 
-    // Get chat history from memory (simplified)
-    const chatHistory = [];
-    if (memory.lastMsg)   chatHistory.push(new HumanMessage(memory.lastMsg));
-    if (memory.lastReply) chatHistory.push(new AIMessage(memory.lastReply));
-
     // Normalize the question before querying
     const normalizedQuestion = normalize(text + context);
 
-    // Query the chain
-    const response = await chain.call({
-      question: normalizedQuestion,
-      chat_history: chatHistory
+    // Query the chain with new API
+    const response = await chain.invoke({
+      input: normalizedQuestion
     });
 
-    if (response && response.text) {
+    if (response && response.answer) {
       console.info('[LangChain] Smart answer generated');
-      return response.text.trim();
+      return response.answer.trim();
     }
 
     return null;
