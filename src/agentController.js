@@ -100,7 +100,7 @@ export async function semanticLookup(userMsg, memory = {}) {
   }
 }
 
-// Main message handler
+// Main message handler - Updated for better error handling and RAG integration
 export async function handleMessage(phone, userMsg) {
   try {
     console.info(`[DEBUG] Processing message: "${userMsg}" from ${phone}`);
