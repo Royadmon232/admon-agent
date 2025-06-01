@@ -6,6 +6,7 @@ import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
+import { normalize } from '../utils/normalize.js';
 
 console.info("✅ PromptTemplate loaded correctly");
 
@@ -81,8 +82,11 @@ export async function initializeChain() {
     chain = ConversationalRetrievalQAChain.fromLLM(
       llm,
       vectorStore.asRetriever({
-        k: 5,
-        searchType: 'similarity'
+        k: 8,
+        searchType: 'similarity',
+        searchKwargs: {
+          minScore: 0.65  // Use this threshold explicitly
+        }
       }),
       {
         prompt,
@@ -124,9 +128,12 @@ export async function smartAnswer(text, memory = {}) {
     if (memory.lastMsg)   chatHistory.push(new HumanMessage(memory.lastMsg));
     if (memory.lastReply) chatHistory.push(new AIMessage(memory.lastReply));
 
+    // Normalize the question before querying
+    const normalizedQuestion = normalize(text + context);
+
     // Query the chain
     const response = await chain.call({
-      question: text + context,
+      question: normalizedQuestion,
       chat_history: chatHistory
     });
 
