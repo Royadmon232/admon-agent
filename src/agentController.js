@@ -1,10 +1,10 @@
 import fs from 'fs/promises';
 import axios from 'axios';
-import { lookupRelevantQAs } from './services/vectorSearch.js';
-import { recall, remember, updateCustomer } from "./services/memoryService.js";
-import { buildSalesResponse, intentDetect } from "./services/salesTemplates.js";
-import { smartAnswer } from "./services/ragChain.js";
-import { sendWapp } from './services/twilioService.js';
+import { lookupRelevantQAs } from '../services/vectorSearch.js';
+import { recall, remember, updateCustomer } from "../services/memoryService.js";
+import { buildSalesResponse, intentDetect } from "../services/salesTemplates.js";
+import { smartAnswer } from "../services/ragChain.js";
+import { sendWapp } from '../services/twilioService.js';
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.78;
@@ -14,7 +14,7 @@ const FALLBACK_MODEL = 'text-embedding-ada-002';
 // Load knowledge base once at startup
 let KNOWLEDGE = [];
 try {
-  const knowledgePath = new URL('./insurance_knowledge.json', import.meta.url);
+  const knowledgePath = new URL('../insurance_knowledge.json', import.meta.url);
   const rawData = await fs.readFile(knowledgePath, 'utf8');
   const insuranceKnowledgeBase = JSON.parse(rawData);
   KNOWLEDGE = insuranceKnowledgeBase.insurance_home_il_qa;
