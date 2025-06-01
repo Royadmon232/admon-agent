@@ -31,9 +31,41 @@ export async function semanticLookup(userMsg, memory = {}) {
     return "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
   }
 
-  // RAG BEGIN before building messages:
-  const matches = await lookupRelevantQAs(userMsg, 8, 0.60);
-  let contextBlock = matches
+  // Split message into multiple questions if it contains multiple question marks or "and/ו"
+  const questionPatterns = userMsg.split(/[?？]|(?:\s+ו\s+)|(?:\s+וגם\s+)|(?:\s+או\s+)|(?:\.\s+)/);
+  const questions = questionPatterns
+    .map(q => q.trim())
+    .filter(q => q.length > 5); // Filter out very short segments
+
+  // If no valid questions found, use the original message
+  if (questions.length === 0) {
+    questions.push(userMsg);
+  }
+
+  console.log(`[RAG] Detected ${questions.length} question(s):`, questions);
+
+  // RAG BEGIN - collect matches for all questions
+  let allMatches = [];
+  for (const question of questions) {
+    const matches = await lookupRelevantQAs(question, 8, 0.60, memory);
+    allMatches = allMatches.concat(matches);
+  }
+
+  // Deduplicate matches based on question text
+  const uniqueMatches = allMatches.reduce((acc, curr) => {
+    const exists = acc.find(m => m.question === curr.question);
+    if (!exists || curr.score > exists.score) {
+      return [...acc.filter(m => m.question !== curr.question), curr];
+    }
+    return acc;
+  }, []);
+
+  // Sort by score and take top 8
+  const topMatches = uniqueMatches
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+
+  let contextBlock = topMatches
     .filter(m => m.question != null && m.answer != null) // Filter out entries with null questions or answers
     .map(m => `שאלה: ${m.question}\nתשובה: ${m.answer}`)
     .join('\n\n');
@@ -54,7 +86,7 @@ export async function semanticLookup(userMsg, memory = {}) {
 
 אם אין לך מידע מספיק או שאתה לא בטוח בתשובה, אמור זאת בכנות ובידידותיות, והצע ללקוח לבדוק את העניין יחד איתך.`;
 
-  const systemPrompt = matches.length
+  const systemPrompt = topMatches.length
      ? `${baseSystemPrompt}\n\n${contextBlock}`
      : baseSystemPrompt;
   const messages = [
@@ -64,9 +96,9 @@ export async function semanticLookup(userMsg, memory = {}) {
   // RAG END
 
   // RAG-TRACE BEGIN
-  if (matches.length) {
+  if (topMatches.length) {
     console.log('[RAG] top matches:',
-      matches
+      topMatches
         .filter(m => m.question != null) // Filter out entries with null questions
         .map(m => ({ q: m.question.slice(0,40)+'…', score: m.score.toFixed(2) })));
   } else {
