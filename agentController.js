@@ -33,10 +33,7 @@ export async function semanticLookup(userMsg, memory = {}) {
 
   // RAG BEGIN before building messages:
   const matches = await lookupRelevantQAs(userMsg, 8, 0.60);
-  let contextBlock = matches
-    .filter(m => m && m.question && m.answer)  // Filter out null or incomplete matches
-    .map(m => `שאלה: ${m.question}\nתשובה: ${m.answer}`)
-    .join('\n\n');
+  let contextBlock = matches.map(m => `שאלה: ${m.question}\nתשובה: ${m.answer}`).join('\n\n');
   if (contextBlock.length / 4 > 1500) { contextBlock = contextBlock.slice(0, 6000); }
   const baseSystemPrompt = `אתה דוני, סוכן ביטוח דירות וירטואלי. דבר בעברית בגוף ראשון. אתה סוכן ביטוח דירות מקצועי ואדיב. תפקידך לענות על שאלות בנושא ביטוח דירה בצורה מקצועית, ידידותית ומקיפה.
 
@@ -66,9 +63,7 @@ export async function semanticLookup(userMsg, memory = {}) {
   // RAG-TRACE BEGIN
   if (matches.length) {
     console.log('[RAG] top matches:',
-      matches
-        .filter(m => m && m.question)  // Filter out null or incomplete matches
-        .map(m => ({ q: m.question.slice(0,40)+'…', score: m.score.toFixed(2) })));
+      matches.map(m => ({ q: m.question.slice(0,40)+'…', score: m.score.toFixed(2) })));
   } else {
     console.log('[RAG] no KB match → fallback');
   }

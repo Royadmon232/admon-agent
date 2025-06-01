@@ -6,7 +6,6 @@ import { HumanMessage, AIMessage } from '@langchain/core/messages';
 import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
-import { normalize } from "../utils/normalize.js";
 
 console.info("✅ PromptTemplate loaded correctly");
 
@@ -103,39 +102,31 @@ export async function initializeChain() {
 
 /**
  * Get smart answer using LangChain RAG
- * @param {string} question - User question
- * @param {string} context - User context
+ * @param {string} text - User question
+ * @param {object} memory - User memory context
  * @returns {Promise<string|null>} Answer or null if not available
  */
-export async function smartAnswer(question, context) {
+export async function smartAnswer(text, memory = {}) {
   if (!chain) {
     console.warn('[LangChain] Chain not initialized, skipping');
     return null;
   }
 
   try {
-    // Normalize the question
-    const query = normalize(question);
-    
-    // Get relevant documents
-    const results = await vectorStore.similaritySearchWithScore(
-      query, 8, { minScore: 0.65 }
-    );
-
     // Build context from memory
-    let contextStr = '';
-    if (context.firstName) contextStr += ` לקוח בשם ${context.firstName}.`;
-    if (context.city) contextStr += ` גר בעיר ${context.city}.`;
-    if (context.homeValue) contextStr += ` ערך דירתו ${context.homeValue}₪.`;
+    let context = '';
+    if (memory.firstName) context += ` לקוח בשם ${memory.firstName}.`;
+    if (memory.city) context += ` גר בעיר ${memory.city}.`;
+    if (memory.homeValue) context += ` ערך דירתו ${memory.homeValue}₪.`;
 
     // Get chat history from memory (simplified)
     const chatHistory = [];
-    if (context.lastMsg)   chatHistory.push(new HumanMessage(context.lastMsg));
-    if (context.lastReply) chatHistory.push(new AIMessage(context.lastReply));
+    if (memory.lastMsg)   chatHistory.push(new HumanMessage(memory.lastMsg));
+    if (memory.lastReply) chatHistory.push(new AIMessage(memory.lastReply));
 
     // Query the chain
     const response = await chain.call({
-      question: query + contextStr,
+      question: text + context,
       chat_history: chatHistory
     });
 
