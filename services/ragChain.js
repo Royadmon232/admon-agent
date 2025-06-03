@@ -58,8 +58,7 @@ export async function initializeChain() {
           contentColumnName: kbConfig.contentColumnName
           // No metadataColumnName - ensuring pure vector-based search
         },
-        // No metadata configuration - using only embeddings for similarity search
-        filter: {}, // Empty filter to ensure no metadata filtering
+        filter: {}, // Explicit empty filter to ensure pure embedding search
         distanceStrategy: 'cosine' // Use cosine similarity for vector comparison
       }
     );

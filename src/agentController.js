@@ -33,6 +33,8 @@ export async function semanticLookup(userMsg, memory = {}) {
 
   // RAG BEGIN before building messages:
   const matches = await lookupRelevantQAs(userMsg, 8, 0.60);
+  const preview = matches ? matches.slice(0, 50) : "";
+  if (!matches) console.warn("[semanticLookup] No FAQ match found");
   let contextBlock = matches
     .filter(m => m.question != null && m.answer != null) // Filter out entries with null questions or answers
     .map(m => `שאלה: ${m.question}\nתשובה: ${m.answer}`)
