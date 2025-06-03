@@ -181,8 +181,6 @@ export async function getHistory(phone, maxTurns = 10) {
   }
 }
 
-const conversationHistory = context.map(msg => `User: ${msg.user}\nBot: ${msg.bot}`).join('\n');
-
 export async function smartAnswer(question, context = []) {
   // Implementation of the function
 } 
