@@ -43,6 +43,7 @@ let chain = null;
 export async function initializeChain() {
   try {
     // Initialize PGVector store using external DATABASE_URL
+    // Note: Using pure vector similarity search without metadata filtering
     vectorStore = await PGVectorStore.initialize(
       embeddings,
       {
@@ -55,8 +56,11 @@ export async function initializeChain() {
           idColumnName: kbConfig.idColumnName ?? 'id',
           vectorColumnName: kbConfig.embeddingColumnName,
           contentColumnName: kbConfig.contentColumnName
-          
-        }
+          // No metadataColumnName - ensuring pure vector-based search
+        },
+        // No metadata configuration - using only embeddings for similarity search
+        filter: {}, // Empty filter to ensure no metadata filtering
+        distanceStrategy: 'cosine' // Use cosine similarity for vector comparison
       }
     );
 
@@ -81,9 +85,8 @@ export async function initializeChain() {
       retriever: vectorStore.asRetriever({
         k: 8,
         searchType: 'similarity',
-        searchKwargs: {
-          minScore: 0.60  // Explicitly set threshold to 0.60 to allow more results
-        }
+        filter: undefined,
+        scoreThreshold: 0.60
       })
     });
 
@@ -269,8 +272,9 @@ Current question: ${question}
       const query = normalize(q);
       const results = await vectorStore.similaritySearchWithScore(
         query, 
-        8, 
-        { minScore: 0.60 }
+        8,
+        undefined,
+        { scoreThreshold: 0.60 }
       );
       
       const answers = results
@@ -300,8 +304,9 @@ Current question: ${question}
       const simplifiedQuery = normalize(question);
       const fallbackResults = await vectorStore.similaritySearchWithScore(
         simplifiedQuery, 
-        8, 
-        { minScore: 0.60 }
+        8,
+        undefined,
+        { scoreThreshold: 0.60 }
       );
       
       const fallbackAnswers = fallbackResults
