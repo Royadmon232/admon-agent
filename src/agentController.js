@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import axios from 'axios';
 import { lookupRelevantQAs } from '../services/vectorSearch.js';
-import { recall, remember, updateCustomer } from "../services/memoryService.js";
+import { recall, remember, updateCustomer, appendExchange, getHistory } from "../services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "../services/salesTemplates.js";
 import { smartAnswer } from "../services/ragChain.js";
 import { sendWapp } from '../services/twilioService.js';
@@ -108,8 +108,15 @@ export async function handleMessage(phone, userMsg) {
     // Normalize user message for better pattern matching
     const normalizedMsg = userMsg.trim();
     
-    // Get memory state
+    // Get memory state and conversation history
     const memory = await recall(phone);
+    const history = await getHistory(phone, 10);
+    
+    // Create context object with memory and history
+    const context = {
+      ...memory,
+      history: history
+    };
     
     // Extract name if present
     if (/^(?:אני|שמי)\s+([^\s]+)/i.test(normalizedMsg)) {
@@ -121,15 +128,15 @@ export async function handleMessage(phone, userMsg) {
     const intent = intentDetect(normalizedMsg);
     console.info("[Intent Detected]:", intent);
 
-    // Get response from RAG or sales
+    // Get response from RAG or sales with context
     const answer =
-      await smartAnswer(normalizedMsg, memory)
+      await smartAnswer(normalizedMsg, context)
       || await semanticLookup(normalizedMsg, memory)
       || await buildSalesResponse(normalizedMsg, memory);
     
-    // Remember the message
-    await remember(phone, 'lastMsg', normalizedMsg);
-    console.info("[Memory Updated] lastMsg saved:", normalizedMsg);
+    // Append exchange to conversation history
+    await appendExchange(phone, normalizedMsg, answer);
+    console.info("[Memory Updated] Exchange saved to history");
 
     return answer;
   } catch (error) {

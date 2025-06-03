@@ -98,40 +98,308 @@ export async function initializeChain() {
 // initializeChain(); // Commented out - now called from index.js
 
 /**
+ * Split questions if multiple questions are detected
+ * @param {string} text - User input text
+ * @returns {string[]} Array of individual questions
+ */
+function splitQuestions(text) {
+  // Split by question marks, periods followed by capital letters, or common Hebrew question patterns
+  const patterns = [
+    /\?/g,
+    /\./g,
+    /\n/g,
+    /ו(?=מה|איך|כמה|מתי|איפה|למה|האם)/g // Hebrew 'and' before question words
+  ];
+  
+  let questions = [text];
+  
+  for (const pattern of patterns) {
+    const newQuestions = [];
+    for (const q of questions) {
+      const splits = q.split(pattern).map(s => s.trim()).filter(s => s.length > 5);
+      if (splits.length > 1) {
+        newQuestions.push(...splits);
+      } else {
+        newQuestions.push(q);
+      }
+    }
+    questions = newQuestions;
+  }
+  
+  // Remove duplicates and empty strings
+  return [...new Set(questions.filter(q => q && q.trim().length > 5))];
+}
+
+/**
+ * Merge answers with GPT-4o for natural, marketing-oriented Hebrew response
+ * @param {Array} answerGroups - Array of {question, answers} objects
+ * @param {string} originalQuestion - Original user question
+ * @param {string} historyContext - Conversation history context
+ * @returns {Promise<string>} Merged answer
+ */
+async function mergeAnswersWithGPT(answerGroups, originalQuestion, historyContext = '') {
+  const systemPrompt = `אתה דוני, סוכן ביטוח דירות וירטואלי. דבר בעברית בגוף ראשון. אתה סוכן ביטוח דירות מקצועי ואדיב. תפקידך לענות על שאלות בנושא ביטוח דירה בצורה מקצועית, ידידותית ומקיפה.
+
+כל תשובה שלך חייבת:
+  1. להיות בעברית תקינה ומקצועית
+  2. להיות מנוסחת בצורה ידידותית, מכבדת ובטון אישי ונעים
+  3. להתייחס ישירות לשאלה שנשאלה
+  4. לכלול את כל המידע הרלוונטי והחשוב
+  5. להיות מדויקת מבחינה מקצועית
+
+קיבלת מידע רלוונטי מהמאגר שלנו. עליך:
+  1. לשלב את המידע הרלוונטי בתשובה אחת מקיפה וקוהרנטית
+  2. לנסח בסגנון אישי וייחודי משלך, שתרגיש אותנטית וטבעית ללקוח
+  3. אם אין מספיק מידע לחלק מהשאלה, השלם מהידע שלך
+  4. לוודא שהתשובה שלמה ומשדרת ביטחון ומקצועיות`;
+
+  let contextBlock = '';
+  for (const group of answerGroups) {
+    if (group.answers && group.answers.length > 0) {
+      contextBlock += `\nשאלה: ${group.question}\n`;
+      contextBlock += `מידע רלוונטי:\n${group.answers.join('\n')}\n`;
+    } else {
+      contextBlock += `\nשאלה: ${group.question}\n`;
+      contextBlock += `מידע רלוונטי: אין מידע ספציפי במאגר - יש לענות מהידע הכללי\n`;
+    }
+  }
+
+  const userPrompt = `השאלה המקורית של הלקוח: ${originalQuestion}\n\nמידע שנמצא במאגר:\n${contextBlock}\n\n${historyContext}\n\nאנא תן תשובה מקיפה ומקצועית לשאלת הלקוח.`;
+
+  try {
+    const response = await llm.invoke([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ]);
+    
+    return response.content.trim();
+  } catch (error) {
+    console.error('[LangChain] Error merging answers with GPT:', error);
+    throw error;
+  }
+}
+
+/**
+ * Detect if a question is a follow-up to the previous conversation
+ * @param {string} text - User question
+ * @param {Array} history - Conversation history
+ * @returns {Promise<boolean>} True if it's a follow-up question
+ */
+async function isFollowUpQuestion(text, history) {
+  if (!history || history.length === 0) return false;
+  
+  // Common Hebrew follow-up patterns
+  const followUpPatterns = [
+    /^(תוכל|יכול|אפשר) להסביר/i,
+    /^מה (זאת אומרת|הכוונה)/i,
+    /^(עוד|יותר) (פרטים|מידע|הסבר)/i,
+    /^(לא|כן),? אבל/i,
+    /^ו(מה|איך|כמה|מתי|איפה|למה)/i,
+    /^בנוסף/i,
+    /^גם/i,
+    /^אז/i,
+    /^למה/i,
+    /^איך בדיוק/i,
+    /^תן לי דוגמה/i,
+    /^הסבר/i,
+    /^פרט/i
+  ];
+  
+  // Check if the question matches follow-up patterns
+  const normalized = text.trim();
+  return followUpPatterns.some(pattern => pattern.test(normalized));
+}
+
+/**
  * Get smart answer using LangChain RAG
  * @param {string} text - User question
- * @param {object} memory - User memory context
+ * @param {object} context - Context object containing memory and history
  * @returns {Promise<string|null>} Answer or null if not available
  */
-export async function smartAnswer(text, memory = {}) {
-  if (!chain) {
-    console.warn('[LangChain] Chain not initialized, skipping');
+export async function smartAnswer(text, context = {}) {
+  if (!vectorStore) {
+    console.warn('[LangChain] Vector store not initialized, skipping');
     return null;
   }
 
   try {
-    // Build context from memory
-    let context = '';
-    if (memory.firstName) context += ` לקוח בשם ${memory.firstName}.`;
-    if (memory.city) context += ` גר בעיר ${memory.city}.`;
-    if (memory.homeValue) context += ` ערך דירתו ${memory.homeValue}₪.`;
-
-    // Normalize the question before querying
-    const normalizedQuestion = normalize(text + context);
-
-    // Query the chain with new API
-    const response = await chain.invoke({
-      input: normalizedQuestion
-    });
-
-    if (response && response.answer) {
-      console.info('[LangChain] Smart answer generated');
-      return response.answer.trim();
+    // Build conversation history context
+    let historyContext = '';
+    const history = context.history || [];
+    
+    if (history.length > 0) {
+      historyContext = '\n\nCONTEXT (היסטוריית שיחה אחרונה):\n';
+      history.forEach(exchange => {
+        historyContext += `User: ${exchange.user}\n`;
+        historyContext += `Bot: ${exchange.bot}\n\n`;
+      });
     }
 
-    return null;
+    // Check if this is a follow-up question
+    const isFollowUp = await isFollowUpQuestion(text, history);
+    
+    if (isFollowUp && history.length > 0) {
+      // Follow-up detected - skip vector search and answer directly using context
+      console.info('[LangChain] Follow-up question detected, using context only');
+      
+      const systemPrompt = `אתה דוני, סוכן ביטוח דירות וירטואלי דובר עברית. דבר בעברית בגוף ראשון.
+כאשר המשתמש שולח המשך כמו "תוכל להסביר שוב?", השתמש בהקשר השיחה למטה.
+אם זה נושא חדש לגמרי, התעלם מההקשר וטפל בהודעה כחדשה.
+
+${historyContext}
+
+ענה בצורה מקצועית, ידידותית ומקיפה בעברית. התייחס ישירות לשאלת ההמשך של הלקוח.`;
+
+      const response = await llm.invoke([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: text }
+      ]);
+      
+      return response.content.trim();
+    }
+
+    // Not a follow-up, proceed with vector search
+    // Build context from memory
+    let memoryContext = '';
+    if (context.firstName || context.first_name) memoryContext += ` לקוח בשם ${context.firstName || context.first_name}.`;
+    if (context.city) memoryContext += ` גר בעיר ${context.city}.`;
+    if (context.homeValue) memoryContext += ` ערך דירתו ${context.homeValue}₪.`;
+
+    const fullQuestion = text + memoryContext;
+
+    // Split questions if multiple detected
+    const questions = splitQuestions(fullQuestion);
+    console.info(`[LangChain] Processing ${questions.length} question(s)`);
+
+    // Process each sub-question WITH context first
+    let answerGroups = [];
+    let foundAnswers = false;
+    
+    for (const question of questions) {
+      // Normalize the question
+      const query = normalize(question);
+      
+      // Perform vector search with exact same params as fallback
+      const results = await vectorStore.similaritySearchWithScore(
+        query, 
+        8, 
+        { minScore: 0.60 }
+      );
+      
+      // Extract answers from matched documents
+      const answers = results
+        .filter(([doc, score]) => score >= 0.60)
+        .map(([doc, score]) => {
+          // Try to extract answer from document content
+          const content = doc.pageContent || doc.content || '';
+          return content;
+        })
+        .filter(answer => answer && answer.trim().length > 0);
+      
+      if (answers.length > 0) {
+        foundAnswers = true;
+      }
+      
+      answerGroups.push({
+        question: question,
+        answers: answers
+      });
+      
+      if (results.length > 0) {
+        console.log(`[LangChain] Question: "${question.slice(0,40)}..." - Found ${results.length} matches`);
+      }
+    }
+
+    // If no answers found with context, try without context (fallback)
+    if (!foundAnswers && memoryContext.length > 0) {
+      console.info('[LangChain] No matches with context, trying without context...');
+      answerGroups = [];
+      
+      // Retry with just the original text (no memory context)
+      const questionsWithoutContext = splitQuestions(text);
+      
+      for (const question of questionsWithoutContext) {
+        const query = normalize(question);
+        const results = await vectorStore.similaritySearchWithScore(
+          query, 
+          8, 
+          { minScore: 0.60 }
+        );
+        
+        const answers = results
+          .filter(([doc, score]) => score >= 0.60)
+          .map(([doc, score]) => {
+            const content = doc.pageContent || doc.content || '';
+            return content;
+          })
+          .filter(answer => answer && answer.trim().length > 0);
+        
+        if (answers.length > 0) {
+          foundAnswers = true;
+        }
+        
+        answerGroups.push({
+          question: question,
+          answers: answers
+        });
+      }
+    }
+
+    // Merge all answers using GPT-4o with conversation history
+    const systemPromptForMerge = `אתה דוני, סוכן ביטוח דירות וירטואלי דובר עברית. דבר בעברית בגוף ראשון.
+כאשר המשתמש שולח המשך כמו "תוכל להסביר שוב?", השתמש בהקשר השיחה למטה.
+אם זה נושא חדש לגמרי, התעלם מההקשר וטפל בהודעה כחדשה.
+
+${historyContext}
+
+ענה בצורה מקצועית, ידידותית ומקיפה בעברית.`;
+
+    const mergedAnswer = await mergeAnswersWithGPTWithContext(answerGroups, text, systemPromptForMerge);
+    
+    console.info('[LangChain] Smart answer generated');
+    return mergedAnswer;
+    
   } catch (error) {
     console.error('[LangChain] Error generating smart answer:', error.message);
     return null;
+  }
+}
+
+/**
+ * Merge answers with GPT-4o using custom system prompt
+ * @param {Array} answerGroups - Array of {question, answers} objects
+ * @param {string} originalQuestion - Original user question
+ * @param {string} systemPrompt - System prompt with context
+ * @returns {Promise<string>} Merged answer
+ */
+async function mergeAnswersWithGPTWithContext(answerGroups, originalQuestion, systemPrompt) {
+  let contextBlock = '';
+  let hasAnswers = false;
+  
+  for (const group of answerGroups) {
+    if (group.answers && group.answers.length > 0) {
+      contextBlock += `\nשאלה: ${group.question}\n`;
+      contextBlock += `מידע רלוונטי:\n${group.answers.join('\n')}\n`;
+      hasAnswers = true;
+    } else {
+      contextBlock += `\nשאלה: ${group.question}\n`;
+      contextBlock += `מידע רלוונטי: אין מידע ספציפי במאגר - יש לענות מהידע הכללי\n`;
+    }
+  }
+
+  const userPrompt = hasAnswers 
+    ? `השאלה המקורית של הלקוח: ${originalQuestion}\n\nמידע שנמצא במאגר:\n${contextBlock}\n\nאנא תן תשובה מקיפה ומקצועית לשאלת הלקוח.`
+    : `השאלה המקורית של הלקוח: ${originalQuestion}\n\nלא נמצא מידע ספציפי במאגר שלנו. אנא ענה מהידע הכללי שלך בצורה מקצועית ומקיפה.`;
+
+  try {
+    const response = await llm.invoke([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ]);
+    
+    return response.content.trim();
+  } catch (error) {
+    console.error('[LangChain] Error merging answers with GPT:', error);
+    throw error;
   }
 } 
