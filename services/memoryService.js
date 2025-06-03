@@ -40,6 +40,12 @@ pool.on('connect', () => {
       history JSONB DEFAULT '[]'
     );`);
     
+    // Add column if missing (for existing deployments)
+    await pool.query(`
+      ALTER TABLE convo_memory 
+      ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '[]'
+    `);
+    
     console.log('[memoryService] ✅ customers and convo_memory tables ready');
   } catch (err) {
     console.error('[memoryService] ⚠️  Failed to ensure tables:', err.message);
