@@ -150,9 +150,9 @@ export async function appendExchange(phone, userMsg, botReply) {
   try {
     await pool.query(
       `INSERT INTO convo_memory (phone, history)
-       VALUES ($1, jsonb_build_array(jsonb_build_object('user', $2, 'bot', $3)))
+       VALUES ($1, jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)))
        ON CONFLICT (phone) DO UPDATE
-       SET history = convo_memory.history || jsonb_build_object('user', $2, 'bot', $3)`,
+       SET history = convo_memory.history || jsonb_build_object('user', $2::text, 'bot', $3::text)`,
       [phone, userMsg, botReply]
     );
     
