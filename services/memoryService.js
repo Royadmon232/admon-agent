@@ -34,22 +34,13 @@ pool.on('connect', () => {
       stage TEXT DEFAULT 'new'
     );`);
     
-    // Add history column if it doesn't exist
-    await pool.query(`
-      ALTER TABLE customers 
-      ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '[]'::jsonb;
-    `);
-    
-    // Create conversation memory table
+    // Create conversation memory table with simple structure
     await pool.query(`CREATE TABLE IF NOT EXISTS convo_memory (
-      id SERIAL PRIMARY KEY,
-      phone TEXT REFERENCES customers(phone) ON DELETE CASCADE,
-      key TEXT NOT NULL,
-      value TEXT,
-      ts TIMESTAMPTZ DEFAULT now()
+      phone TEXT PRIMARY KEY,
+      history JSONB DEFAULT '[]'
     );`);
     
-    console.log('[memoryService] ✅ customers and convo_memory tables ready with history column');
+    console.log('[memoryService] ✅ customers and convo_memory tables ready');
   } catch (err) {
     console.error('[memoryService] ⚠️  Failed to ensure tables:', err.message);
   }
@@ -151,24 +142,13 @@ export async function updateCustomer(phone, fieldsObject) {
  */
 export async function appendExchange(phone, userMsg, botReply) {
   try {
-    // Ensure customer exists first
     await pool.query(
-      `INSERT INTO customers (phone, history) VALUES ($1, $2::jsonb) ON CONFLICT (phone) DO NOTHING`,
-      [phone, '[]']
+      `INSERT INTO convo_memory (phone, history)
+       VALUES ($1, jsonb_build_array(jsonb_build_object('user', $2, 'bot', $3)))
+       ON CONFLICT (phone) DO UPDATE
+       SET history = convo_memory.history || jsonb_build_object('user', $2, 'bot', $3)`,
+      [phone, userMsg, botReply]
     );
-    
-    // Append to history array in JSONB column
-    const exchange = {
-      user: userMsg,
-      bot: botReply,
-      timestamp: new Date().toISOString()
-    };
-    
-    await pool.query(`
-      UPDATE customers 
-      SET history = history || $1::jsonb
-      WHERE phone = $2
-    `, [JSON.stringify(exchange), phone]);
     
     // Also remember last message for backward compatibility
     await remember(phone, 'lastMsg', userMsg);
@@ -189,34 +169,20 @@ export async function appendExchange(phone, userMsg, botReply) {
  */
 export async function getHistory(phone, maxTurns = 10) {
   try {
-    const result = await pool.query(`
-      SELECT 
-        CASE 
-          WHEN jsonb_array_length(history) > $2 
-          THEN (
-            SELECT jsonb_agg(elem)
-            FROM (
-              SELECT elem
-              FROM jsonb_array_elements(history) WITH ORDINALITY AS t(elem, ord)
-              ORDER BY ord DESC
-              LIMIT $2
-            ) AS recent
-          )
-          ELSE history
-        END as history
-      FROM customers 
-      WHERE phone = $1
-    `, [phone, maxTurns]);
+    const result = await pool.query(
+      `SELECT history FROM convo_memory WHERE phone = $1`,
+      [phone]
+    );
     
-    if (result.rows.length === 0) {
-      return [];
-    }
-    
-    const history = result.rows[0].history || [];
-    // Return in chronological order (oldest first)
-    return Array.isArray(history) ? history.reverse() : [];
+    return result.rows[0]?.history.slice(-maxTurns) || [];
   } catch (err) {
     console.error('[memoryService] ⚠️  Failed to get history:', err.message);
     return [];
   }
+}
+
+const conversationHistory = context.map(msg => `User: ${msg.user}\nBot: ${msg.bot}`).join('\n');
+
+export async function smartAnswer(question, context = []) {
+  // Implementation of the function
 } 

@@ -108,15 +108,11 @@ export async function handleMessage(phone, userMsg) {
     // Normalize user message for better pattern matching
     const normalizedMsg = userMsg.trim();
     
-    // Get memory state and conversation history
+    // Get memory state
     const memory = await recall(phone);
-    const history = await getHistory(phone, 10);
     
-    // Create context object with memory and history
-    const context = {
-      ...memory,
-      history: history
-    };
+    // Get conversation history
+    const history = await getHistory(phone);
     
     // Extract name if present
     if (/^(?:אני|שמי)\s+([^\s]+)/i.test(normalizedMsg)) {
@@ -128,16 +124,15 @@ export async function handleMessage(phone, userMsg) {
     const intent = intentDetect(normalizedMsg);
     console.info("[Intent Detected]:", intent);
 
-    // Get response from RAG or sales with context
+    // Get response from RAG or sales
     const answer =
-      await smartAnswer(normalizedMsg, context)
+      await smartAnswer(normalizedMsg, history)
       || await semanticLookup(normalizedMsg, memory)
       || await buildSalesResponse(normalizedMsg, memory);
     
     // Append exchange to conversation history
     await appendExchange(phone, normalizedMsg, answer);
-    console.info("[Memory Updated] Exchange saved to history");
-
+    
     return answer;
   } catch (error) {
     console.error("Error handling message:", error);

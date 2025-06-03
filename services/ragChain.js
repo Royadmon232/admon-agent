@@ -212,85 +212,70 @@ async function isFollowUpQuestion(text, history) {
 
 /**
  * Get smart answer using LangChain RAG
- * @param {string} text - User question
- * @param {object} context - Context object containing memory and history
+ * @param {string} question - User question
+ * @param {Array} context - Array of conversation history objects with user/bot properties
  * @returns {Promise<string|null>} Answer or null if not available
  */
-export async function smartAnswer(text, context = {}) {
+export async function smartAnswer(question, context = []) {
   if (!vectorStore) {
     console.warn('[LangChain] Vector store not initialized, skipping');
     return null;
   }
 
   try {
-    // Build conversation history context
-    let historyContext = '';
-    const history = context.history || [];
+    // Build conversation history for prompt
+    const conversationHistory = context.map(msg => `User: ${msg.user}\nBot: ${msg.bot}`).join('\n');
     
-    if (history.length > 0) {
-      historyContext = '\n\nCONTEXT (היסטוריית שיחה אחרונה):\n';
-      history.forEach(exchange => {
-        historyContext += `User: ${exchange.user}\n`;
-        historyContext += `Bot: ${exchange.bot}\n\n`;
-      });
-    }
+    // Check if this is a follow-up question using GPT-4o
+    const contextCheckPrompt = `
+You are a Hebrew-speaking home-insurance chatbot.
+Use the following conversation history to determine if the current question is related to previous exchanges.
+If the user asks a follow-up (e.g., "תסביר שוב"), answer based on the previous context clearly.
+If the user asks something new, ignore context and run vector search as usual.
 
-    // Check if this is a follow-up question
-    const isFollowUp = await isFollowUpQuestion(text, history);
+Conversation history:
+${conversationHistory}
+
+Current question: ${question}
+`;
+
+    // First, check if this is a follow-up question
+    const isFollowUp = await isFollowUpQuestion(question, context);
     
-    if (isFollowUp && history.length > 0) {
-      // Follow-up detected - skip vector search and answer directly using context
+    if (isFollowUp && context.length > 0) {
+      // Follow-up detected - answer directly using context only
       console.info('[LangChain] Follow-up question detected, using context only');
       
-      const systemPrompt = `אתה דוני, סוכן ביטוח דירות וירטואלי דובר עברית. דבר בעברית בגוף ראשון.
-כאשר המשתמש שולח המשך כמו "תוכל להסביר שוב?", השתמש בהקשר השיחה למטה.
-אם זה נושא חדש לגמרי, התעלם מההקשר וטפל בהודעה כחדשה.
-
-${historyContext}
-
-ענה בצורה מקצועית, ידידותית ומקיפה בעברית. התייחס ישירות לשאלת ההמשך של הלקוח.`;
-
       const response = await llm.invoke([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: text }
+        { role: 'system', content: contextCheckPrompt },
+        { role: 'user', content: 'ענה על השאלה הנוכחית בהתבסס על ההיסטוריה. תן תשובה מקיפה בעברית.' }
       ]);
       
       return response.content.trim();
     }
 
-    // Not a follow-up, proceed with vector search
-    // Build context from memory
-    let memoryContext = '';
-    if (context.firstName || context.first_name) memoryContext += ` לקוח בשם ${context.firstName || context.first_name}.`;
-    if (context.city) memoryContext += ` גר בעיר ${context.city}.`;
-    if (context.homeValue) memoryContext += ` ערך דירתו ${context.homeValue}₪.`;
-
-    const fullQuestion = text + memoryContext;
-
+    // Not a clear follow-up, proceed with vector search
+    console.info('[LangChain] Running vector search...');
+    
     // Split questions if multiple detected
-    const questions = splitQuestions(fullQuestion);
+    const questions = splitQuestions(question);
     console.info(`[LangChain] Processing ${questions.length} question(s)`);
 
-    // Process each sub-question WITH context first
+    // First attempt: vector search WITH context
     let answerGroups = [];
     let foundAnswers = false;
     
-    for (const question of questions) {
-      // Normalize the question
-      const query = normalize(question);
-      
-      // Perform vector search with exact same params as fallback
+    for (const q of questions) {
+      const query = normalize(q);
       const results = await vectorStore.similaritySearchWithScore(
         query, 
         8, 
         { minScore: 0.60 }
       );
       
-      // Extract answers from matched documents
       const answers = results
         .filter(([doc, score]) => score >= 0.60)
         .map(([doc, score]) => {
-          // Try to extract answer from document content
           const content = doc.pageContent || doc.content || '';
           return content;
         })
@@ -301,60 +286,57 @@ ${historyContext}
       }
       
       answerGroups.push({
-        question: question,
+        question: q,
         answers: answers
       });
-      
-      if (results.length > 0) {
-        console.log(`[LangChain] Question: "${question.slice(0,40)}..." - Found ${results.length} matches`);
-      }
     }
 
-    // If no answers found with context, try without context (fallback)
-    if (!foundAnswers && memoryContext.length > 0) {
-      console.info('[LangChain] No matches with context, trying without context...');
+    // If no answers found, try without context (fallback)
+    if (!foundAnswers) {
+      console.info('[LangChain] No matches found, trying fallback search...');
       answerGroups = [];
       
-      // Retry with just the original text (no memory context)
-      const questionsWithoutContext = splitQuestions(text);
+      // Retry with simplified query
+      const simplifiedQuery = normalize(question);
+      const fallbackResults = await vectorStore.similaritySearchWithScore(
+        simplifiedQuery, 
+        8, 
+        { minScore: 0.60 }
+      );
       
-      for (const question of questionsWithoutContext) {
-        const query = normalize(question);
-        const results = await vectorStore.similaritySearchWithScore(
-          query, 
-          8, 
-          { minScore: 0.60 }
-        );
-        
-        const answers = results
-          .filter(([doc, score]) => score >= 0.60)
-          .map(([doc, score]) => {
-            const content = doc.pageContent || doc.content || '';
-            return content;
-          })
-          .filter(answer => answer && answer.trim().length > 0);
-        
-        if (answers.length > 0) {
-          foundAnswers = true;
-        }
-        
-        answerGroups.push({
-          question: question,
-          answers: answers
-        });
+      const fallbackAnswers = fallbackResults
+        .filter(([doc, score]) => score >= 0.60)
+        .map(([doc, score]) => {
+          const content = doc.pageContent || doc.content || '';
+          return content;
+        })
+        .filter(answer => answer && answer.trim().length > 0);
+      
+      if (fallbackAnswers.length > 0) {
+        foundAnswers = true;
       }
+      
+      answerGroups = [{
+        question: question,
+        answers: fallbackAnswers
+      }];
     }
 
-    // Merge all answers using GPT-4o with conversation history
-    const systemPromptForMerge = `אתה דוני, סוכן ביטוח דירות וירטואלי דובר עברית. דבר בעברית בגוף ראשון.
-כאשר המשתמש שולח המשך כמו "תוכל להסביר שוב?", השתמש בהקשר השיחה למטה.
-אם זה נושא חדש לגמרי, התעלם מההקשר וטפל בהודעה כחדשה.
+    // Merge answers or let GPT generate if nothing found
+    const systemPromptForMerge = `
+You are a Hebrew-speaking home-insurance chatbot.
+Use the following conversation history to determine if the current question is related to previous exchanges.
+If the user asks a follow-up (e.g., "תסביר שוב"), answer based on the previous context clearly.
+If the user asks something new, ignore context and run vector search as usual.
 
-${historyContext}
+Conversation history:
+${conversationHistory}
 
-ענה בצורה מקצועית, ידידותית ומקיפה בעברית.`;
+Current question: ${question}
 
-    const mergedAnswer = await mergeAnswersWithGPTWithContext(answerGroups, text, systemPromptForMerge);
+${foundAnswers ? 'נמצאו תשובות רלוונטיות במאגר. שלב אותן לתשובה מקיפה.' : 'לא נמצאו תשובות במאגר. ענה מהידע הכללי שלך.'}`;
+
+    const mergedAnswer = await mergeAnswersWithGPTWithContext(answerGroups, question, systemPromptForMerge);
     
     console.info('[LangChain] Smart answer generated');
     return mergedAnswer;
