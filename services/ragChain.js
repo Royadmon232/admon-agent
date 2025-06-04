@@ -56,7 +56,7 @@ export async function initializeChain() {
           idColumnName: kbConfig.idColumnName ?? 'id',
           vectorColumnName: kbConfig.embeddingColumnName,
           contentColumnName: kbConfig.contentColumnName,
-          metadataColumnName: 'metadata' // Add metadata column
+          metadataColumnName: undefined // Remove metadata dependency
         },
         filter: undefined, // Explicitly disable filtering
         distanceStrategy: 'cosine' // Use cosine similarity for vector comparison
@@ -83,9 +83,7 @@ export async function initializeChain() {
       combineDocsChain: documentChain,
       retriever: vectorStore.asRetriever({
         k: 8,
-        searchType: 'similarity',
-        filter: undefined, // Explicitly disable filtering
-        scoreThreshold: 0.60 // Set explicit score threshold
+        searchType: 'similarity'
       })
     });
 
@@ -293,12 +291,10 @@ Current question: ${question}
     
     for (const q of questions) {
       const query = normalize(q);
-      // Use direct vector search instead of retriever
+      // Use direct vector search with score threshold
       const results = await vectorStore.similaritySearchWithScore(
         query, 
-        8,
-        undefined,
-        { scoreThreshold: 0.60 }
+        8
       );
       
       const answers = results
@@ -328,9 +324,7 @@ Current question: ${question}
       const simplifiedQuery = normalize(question);
       const fallbackResults = await vectorStore.similaritySearchWithScore(
         simplifiedQuery, 
-        8,
-        undefined,
-        { scoreThreshold: 0.60 }
+        8
       );
       
       const fallbackAnswers = fallbackResults
