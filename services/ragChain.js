@@ -293,6 +293,7 @@ Current question: ${question}
     
     for (const q of questions) {
       const query = normalize(q);
+      // Use direct vector search instead of retriever
       const results = await vectorStore.similaritySearchWithScore(
         query, 
         8,
