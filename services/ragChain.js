@@ -55,10 +55,10 @@ export async function initializeChain() {
         columns: {
           idColumnName: kbConfig.idColumnName ?? 'id',
           vectorColumnName: kbConfig.embeddingColumnName,
-          contentColumnName: kbConfig.contentColumnName
-          // No metadataColumnName - ensuring pure vector-based search
+          contentColumnName: kbConfig.contentColumnName,
+          metadataColumnName: undefined // Explicitly disable metadata
         },
-        filter: {}, // Explicit empty filter to ensure pure embedding search
+        filter: undefined, // Explicitly disable filtering
         distanceStrategy: 'cosine' // Use cosine similarity for vector comparison
       }
     );
@@ -84,8 +84,8 @@ export async function initializeChain() {
       retriever: vectorStore.asRetriever({
         k: 8,
         searchType: 'similarity',
-        filter: undefined,
-        scoreThreshold: 0.60
+        filter: undefined, // Explicitly disable filtering
+        scoreThreshold: 0.60 // Set explicit score threshold
       })
     });
 

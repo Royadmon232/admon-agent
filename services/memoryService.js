@@ -37,13 +37,26 @@ pool.on('connect', () => {
     // Create conversation memory table with simple structure
     await pool.query(`CREATE TABLE IF NOT EXISTS convo_memory (
       phone TEXT PRIMARY KEY,
-      history JSONB DEFAULT '[]'
+      history JSONB DEFAULT '[]'::jsonb
     );`);
     
     // Add column if missing (for existing deployments)
     await pool.query(`
       ALTER TABLE convo_memory 
-      ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '[]'
+      ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '[]'::jsonb
+    `);
+    
+    // Ensure phone is unique (for existing deployments)
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint 
+          WHERE conname = 'convo_memory_pkey'
+        ) THEN
+          ALTER TABLE convo_memory ADD PRIMARY KEY (phone);
+        END IF;
+      END $$;
     `);
     
     console.log('[memoryService] ✅ customers and convo_memory tables ready');
@@ -148,11 +161,18 @@ export async function updateCustomer(phone, fieldsObject) {
  */
 export async function appendExchange(phone, userMsg, botReply) {
   try {
+    // First ensure the customer exists
+    await pool.query(
+      'INSERT INTO customers (phone) VALUES ($1) ON CONFLICT (phone) DO NOTHING',
+      [phone]
+    );
+
+    // Then append the exchange to history
     await pool.query(
       `INSERT INTO convo_memory (phone, history)
        VALUES ($1, jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)))
        ON CONFLICT (phone) DO UPDATE
-       SET history = convo_memory.history || jsonb_build_object('user', $2::text, 'bot', $3::text)`,
+       SET history = COALESCE(convo_memory.history, '[]'::jsonb) || jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text))`,
       [phone, userMsg, botReply]
     );
     
