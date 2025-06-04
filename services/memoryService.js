@@ -45,11 +45,9 @@ pool.on('connect', () => {
     await pool.query(`
       ALTER TABLE convo_memory 
       ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '[]'::jsonb,
-      ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    `);
-    
-    // Ensure phone is unique (for existing deployments)
-    await pool.query(`
+      ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      
+      -- Ensure primary key exists
       DO $$ 
       BEGIN
         IF NOT EXISTS (
@@ -169,15 +167,26 @@ export async function appendExchange(phone, userMsg, botReply) {
       [phone]
     );
 
-    // Then append the exchange to history
-    await pool.query(
-      `INSERT INTO convo_memory (phone, history, last_updated)
-       VALUES ($1, jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)), CURRENT_TIMESTAMP)
-       ON CONFLICT (phone) DO UPDATE
-       SET history = COALESCE(convo_memory.history, '[]'::jsonb) || jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)),
-           last_updated = CURRENT_TIMESTAMP`,
-      [phone, userMsg, botReply]
-    );
+    // Then append the exchange to history using a transaction
+    await pool.query('BEGIN');
+    try {
+      // First try to insert
+      await pool.query(
+        `INSERT INTO convo_memory (phone, history, last_updated)
+         VALUES ($1, jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)), CURRENT_TIMESTAMP)`,
+        [phone, userMsg, botReply]
+      );
+    } catch (err) {
+      // If insert fails, update existing record
+      await pool.query(
+        `UPDATE convo_memory 
+         SET history = COALESCE(history, '[]'::jsonb) || jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)),
+             last_updated = CURRENT_TIMESTAMP
+         WHERE phone = $1`,
+        [phone, userMsg, botReply]
+      );
+    }
+    await pool.query('COMMIT');
     
     // Also remember last message for backward compatibility
     await remember(phone, 'lastMsg', userMsg);
@@ -185,6 +194,7 @@ export async function appendExchange(phone, userMsg, botReply) {
     
     console.log(`[memoryService] ✅ Appended exchange for ${phone}`);
   } catch (err) {
+    await pool.query('ROLLBACK');
     console.error('[memoryService] ⚠️  Failed to append exchange:', err.message);
     throw err;
   }

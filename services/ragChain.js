@@ -402,11 +402,12 @@ async function mergeAnswersWithGPTWithContext(answerGroups, originalQuestion, sy
     : `השאלה המקורית של הלקוח: ${originalQuestion}\n\nלא נמצא מידע ספציפי במאגר שלנו. אנא ענה מהידע הכללי שלך בצורה מקצועית ומקיפה.`;
 
   try {
-    const response = await llm.invoke([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ]);
+    const messages = [
+      new HumanMessage(systemPrompt),
+      new HumanMessage(userPrompt)
+    ];
     
+    const response = await llm.invoke(messages);
     return response.content.trim();
   } catch (error) {
     console.error('[LangChain] Error merging answers with GPT:', error);
