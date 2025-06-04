@@ -56,7 +56,7 @@ export async function initializeChain() {
           idColumnName: kbConfig.idColumnName ?? 'id',
           vectorColumnName: kbConfig.embeddingColumnName,
           contentColumnName: kbConfig.contentColumnName,
-          metadataColumnName: undefined // Explicitly disable metadata
+          metadataColumnName: 'metadata' // Add metadata column
         },
         filter: undefined, // Explicitly disable filtering
         distanceStrategy: 'cosine' // Use cosine similarity for vector comparison
@@ -98,6 +98,30 @@ export async function initializeChain() {
 
 // Initialize on module load
 // initializeChain(); // Commented out - now called from index.js
+
+// Ensure the vector store table has the required columns
+(async () => {
+  try {
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        -- Add metadata column if it doesn't exist
+        IF NOT EXISTS (
+          SELECT 1 
+          FROM information_schema.columns 
+          WHERE table_name = '${kbConfig.tableName}' 
+          AND column_name = 'metadata'
+        ) THEN
+          ALTER TABLE ${kbConfig.tableName} 
+          ADD COLUMN metadata JSONB DEFAULT '{}'::jsonb;
+        END IF;
+      END $$;
+    `);
+    console.log('✅ Vector store table structure verified');
+  } catch (err) {
+    console.error('⚠️ Failed to verify vector store table structure:', err.message);
+  }
+})();
 
 /**
  * Split questions if multiple questions are detected

@@ -37,13 +37,15 @@ pool.on('connect', () => {
     // Create conversation memory table with simple structure
     await pool.query(`CREATE TABLE IF NOT EXISTS convo_memory (
       phone TEXT PRIMARY KEY,
-      history JSONB DEFAULT '[]'::jsonb
+      history JSONB DEFAULT '[]'::jsonb,
+      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );`);
     
     // Add column if missing (for existing deployments)
     await pool.query(`
       ALTER TABLE convo_memory 
-      ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '[]'::jsonb
+      ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     `);
     
     // Ensure phone is unique (for existing deployments)
@@ -169,10 +171,11 @@ export async function appendExchange(phone, userMsg, botReply) {
 
     // Then append the exchange to history
     await pool.query(
-      `INSERT INTO convo_memory (phone, history)
-       VALUES ($1, jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)))
+      `INSERT INTO convo_memory (phone, history, last_updated)
+       VALUES ($1, jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)), CURRENT_TIMESTAMP)
        ON CONFLICT (phone) DO UPDATE
-       SET history = COALESCE(convo_memory.history, '[]'::jsonb) || jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text))`,
+       SET history = COALESCE(convo_memory.history, '[]'::jsonb) || jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)),
+           last_updated = CURRENT_TIMESTAMP`,
       [phone, userMsg, botReply]
     );
     
