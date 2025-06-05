@@ -249,6 +249,7 @@ export async function smartAnswer(question, context = []) {
     return null;
   }
 
+  // Check for greetings first
   if (/^(היי|שלום|צהריים|ערב טוב)/i.test(question.trim())) {
     return "שלום! אני דוני, סוכן ביטוח דירות. איך אוכל לעזור?";
   }
@@ -259,15 +260,15 @@ export async function smartAnswer(question, context = []) {
     
     // Check if this is a follow-up question using GPT-4o
     const contextCheckPrompt = `
-You are a Hebrew-speaking home-insurance chatbot.
-Use the following conversation history to determine if the current question is related to previous exchanges.
-If the user asks a follow-up (e.g., "תסביר שוב"), answer based on the previous context clearly.
-If the user asks something new, ignore context and run vector search as usual.
+אתה דוני, סוכן ביטוח דירות וירטואלי.
+השתמש בהיסטוריית השיחה הבאה כדי לקבוע אם השאלה הנוכחית היא המשך לשיחה קודמת.
+אם המשתמש שואל שאלת המשך (למשל "תסביר שוב"), ענה בהתבסס על ההקשר הקודם.
+אם המשתמש שואל משהו חדש, התעלם מהקשר והפעל חיפוש וקטורי כרגיל.
 
-Conversation history:
+היסטוריית השיחה:
 ${conversationHistory}
 
-Current question: ${question}
+שאלה נוכחית: ${question}
 `;
 
     // First, check if this is a follow-up question
