@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import axios from 'axios';
 import { lookupRelevantQAs } from '../services/vectorSearch.js';
-import { recall, remember, updateCustomer, appendExchange, getHistory } from "../services/memoryService.js";
+import { getHistory, appendExchange, updateCustomer } from "../services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "../services/salesTemplates.js";
 import { smartAnswer } from "../services/ragChain.js";
 import { sendWapp } from '../services/twilioService.js';
@@ -110,9 +110,6 @@ export async function handleMessage(phone, userMsg) {
     // Normalize user message for better pattern matching
     const normalizedMsg = userMsg.trim();
     
-    // Get memory state
-    const memory = await recall(phone);
-    
     // Get conversation history
     const history = await getHistory(phone);
     
@@ -128,9 +125,9 @@ export async function handleMessage(phone, userMsg) {
 
     // Get response from RAG or sales
     const answer =
-      await smartAnswer(normalizedMsg, history)
-      || await semanticLookup(normalizedMsg, history)
-      || await buildSalesResponse(normalizedMsg, history);
+      await smartAnswer(normalizedMsg, history) ||
+      await semanticLookup(normalizedMsg, history) ||
+      await buildSalesResponse(normalizedMsg, history);
     
     // Append exchange to conversation history
     await appendExchange(phone, normalizedMsg, answer);

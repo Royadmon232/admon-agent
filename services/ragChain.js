@@ -56,7 +56,7 @@ export async function initializeChain() {
           idColumnName: kbConfig.idColumnName ?? 'id',
           vectorColumnName: kbConfig.embeddingColumnName,
           contentColumnName: kbConfig.contentColumnName,
-          metadataColumnName: undefined // Explicitly disable metadata
+          metadataColumnName: null // Explicitly disable metadata
         },
         filter: {}, // Force embedding-only search with empty filter
         distanceStrategy: 'cosine' // Use cosine similarity for vector comparison
@@ -82,8 +82,11 @@ export async function initializeChain() {
     chain = await createRetrievalChain({
       combineDocsChain: documentChain,
       retriever: vectorStore.asRetriever({
-        k: 15, // Increase k to get more results
-        searchType: 'similarity'
+        k: 8, // Match fallback k value
+        searchType: 'similarity',
+        searchKwargs: {
+          scoreThreshold: 0.60 // Match fallback threshold
+        }
       })
     });
 
@@ -246,6 +249,10 @@ export async function smartAnswer(question, context = []) {
     return null;
   }
 
+  if (/^(היי|שלום|צהריים|ערב טוב)/i.test(question.trim())) {
+    return "שלום! אני דוני, סוכן ביטוח דירות. איך אוכל לעזור?";
+  }
+
   try {
     // Build conversation history for prompt
     const conversationHistory = context.map(msg => `User: ${msg.user}\nBot: ${msg.bot}`).join('\n');
@@ -290,23 +297,16 @@ Current question: ${question}
     let foundAnswers = false;
     
     for (const q of questions) {
-      const query = normalize(q);
-      // Use direct vector search without score threshold in params
       const results = await vectorStore.similaritySearchWithScore(
-        query, 
-        15  // Increase k to get more results before filtering
+        normalize(q),
+        15,
+        { scoreThreshold: 0.60 }
       );
       
       // Log raw scores for debugging
       console.info(`[LangChain] Raw scores for "${q}":`, results.map(([doc, score]) => score).slice(0, 5));
       
       const answers = results
-        .filter(([doc, score]) => {
-          // PGVector returns cosine distance (0 = identical, 2 = opposite)
-          // Convert to similarity: 1 - distance
-          const similarity = 1 - score;
-          return similarity >= 0.40; // Lower threshold since we're using similarity
-        })
         .map(([doc, score]) => {
           const content = doc.pageContent || doc.content || '';
           console.info(`[LangChain] Match found - similarity: ${(1 - score).toFixed(3)}, content: ${content.slice(0, 50)}...`);
@@ -360,17 +360,28 @@ Current question: ${question}
 
     // Merge answers or let GPT generate if nothing found
     const systemPromptForMerge = `
-You are a Hebrew-speaking home-insurance chatbot.
-Use the following conversation history to determine if the current question is related to previous exchanges.
-If the user asks a follow-up (e.g., "תסביר שוב"), answer based on the previous context clearly.
-If the user asks something new, ignore context and run vector search as usual.
+אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. אתה מדבר בעברית בגוף ראשון ומשתמש בסגנון שיווקי-ייעוצי.
 
-Conversation history:
+תמיד התחל את התשובה במילים: "שלום! אני דוני, סוכן ביטוח דירות..."
+
+השתמש בסגנון שיווקי-ייעוצי:
+- הדגש את היתרונות והכיסויים האופציונליים
+- השתמש בשפה משכנעת אך מקצועית
+- הצג את עצמך כמומחה בתחום ביטוח הדירות
+- השתמש בשפה אישית ונעימה
+- הדגש את הערך והביטחון שהלקוח מקבל
+
+תבניות שיווק מומלצות:
+- פתיחה: "ביטוח דירה מגן על ההשקעה הכי חשובה שלך מפני נזקי מים, גניבה ואש"
+- הדגשת ערך: "פוליסת ביטוח דירה איכותית יכולה לחסוך לך עשרות אלפי שקלים בעת נזק"
+- סגירה: "אשמח לבנות עבורך הצעת מחיר מותאמת אישית ללא התחייבות"
+
+היסטוריית השיחה:
 ${conversationHistory}
 
-Current question: ${question}
+שאלה נוכחית: ${question}
 
-${foundAnswers ? 'נמצאו תשובות רלוונטיות במאגר. שלב אותן לתשובה מקיפה.' : 'לא נמצאו תשובות במאגר. ענה מהידע הכללי שלך.'}`;
+${foundAnswers ? 'נמצאו תשובות רלוונטיות במאגר. שלב אותן לתשובה מקיפה תוך שימוש בסגנון שיווקי-ייעוצי.' : 'לא נמצאו תשובות במאגר. ענה מהידע הכללי שלך תוך שימוש בסגנון שיווקי-ייעוצי.'}`;
 
     const mergedAnswer = await mergeAnswersWithGPTWithContext(answerGroups, question, systemPromptForMerge);
     
