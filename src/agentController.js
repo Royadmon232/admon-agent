@@ -129,8 +129,8 @@ export async function handleMessage(phone, userMsg) {
     // Get response from RAG or sales
     const answer =
       await smartAnswer(normalizedMsg, history)
-      || await semanticLookup(normalizedMsg, memory)
-      || await buildSalesResponse(normalizedMsg, memory);
+      || await semanticLookup(normalizedMsg, history)
+      || await buildSalesResponse(normalizedMsg, history);
     
     // Append exchange to conversation history
     await appendExchange(phone, normalizedMsg, answer);
