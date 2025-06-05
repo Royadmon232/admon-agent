@@ -82,9 +82,8 @@ export async function initializeChain() {
     chain = await createRetrievalChain({
       combineDocsChain: documentChain,
       retriever: vectorStore.asRetriever({
-        k: 8,
-        searchType: 'similarity',
-        searchKwargs: { k: 8, scoreThreshold: 0.60 }
+        k: 15, // Increase k to get more results
+        searchType: 'similarity'
       })
     });
 
@@ -292,17 +291,25 @@ Current question: ${question}
     
     for (const q of questions) {
       const query = normalize(q);
-      // Use direct vector search with score threshold
+      // Use direct vector search without score threshold in params
       const results = await vectorStore.similaritySearchWithScore(
         query, 
-        8,
-        { scoreThreshold: 0.60 }
+        15  // Increase k to get more results before filtering
       );
       
+      // Log raw scores for debugging
+      console.info(`[LangChain] Raw scores for "${q}":`, results.map(([doc, score]) => score).slice(0, 5));
+      
       const answers = results
-        .filter(([doc, score]) => score >= 0.60)
+        .filter(([doc, score]) => {
+          // PGVector returns cosine distance (0 = identical, 2 = opposite)
+          // Convert to similarity: 1 - distance
+          const similarity = 1 - score;
+          return similarity >= 0.40; // Lower threshold since we're using similarity
+        })
         .map(([doc, score]) => {
           const content = doc.pageContent || doc.content || '';
+          console.info(`[LangChain] Match found - similarity: ${(1 - score).toFixed(3)}, content: ${content.slice(0, 50)}...`);
           return content;
         })
         .filter(answer => answer && answer.trim().length > 0);
@@ -326,12 +333,15 @@ Current question: ${question}
       const simplifiedQuery = normalize(question);
       const fallbackResults = await vectorStore.similaritySearchWithScore(
         simplifiedQuery, 
-        8,
-        { scoreThreshold: 0.60 }
+        15  // Increase k to get more results before filtering
       );
       
       const fallbackAnswers = fallbackResults
-        .filter(([doc, score]) => score >= 0.60)
+        .filter(([doc, score]) => {
+          // Convert distance to similarity
+          const similarity = 1 - score;
+          return similarity >= 0.40; // Lower threshold
+        })
         .map(([doc, score]) => {
           const content = doc.pageContent || doc.content || '';
           return content;
