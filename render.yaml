@@ -1,12 +1,22 @@
 services:
   - type: web
-    name: admon-agent           # leave as-is or adjust to your Render name
+    name: insurance-whatsapp-bot
     env: node
-
-    # ---------- Build step ----------
-    buildCommand: |
-      npm ci
-      npm run seed:embeddings
-
-    # ---------- Start step ----------
-    startCommand: node index.js 
+    buildCommand: npm install
+    startCommand: node index.js
+    postbuildCommand: ln -sf /opt/render/project/src/marketing_templates.json /opt/render/project/marketing_templates.json
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER
+        sync: false 
