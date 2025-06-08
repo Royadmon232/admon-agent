@@ -8,13 +8,14 @@ import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
 import { normalize } from '../utils/normalize.js';
-import fs from 'fs';
-import path from 'path';
+import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
+// Load sales templates
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const salesTemplates = JSON.parse(fs.readFileSync(path.join(__dirname, '../salesTemplates.json'), 'utf8'));
+const __dirname = dirname(__filename);
+const salesTemplates = JSON.parse(readFileSync(join(__dirname, '../../marketing_templates.json'), 'utf8'));
 
 console.info("✅ PromptTemplate loaded correctly");
 
@@ -401,7 +402,8 @@ ${context.length === 0 ? 'התחל את התשובה במילים: "שלום! א
 - אל תציג את עצמך כבוט או AI - אתה סוכן ביטוח אמיתי
 
 תבניות שיווק מומלצות:
-${salesTemplates.templates.map(t => `- ${t}`).join('\n')}
+${salesTemplates.LEAD ? salesTemplates.LEAD.map(t => `- ${t}`).join('\n') : ''}
+${salesTemplates.DEFAULT ? salesTemplates.DEFAULT.map(t => `- ${t}`).join('\n') : ''}
 
 היסטוריית השיחה:
 ${conversationHistory}
