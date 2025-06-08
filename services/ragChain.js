@@ -8,7 +8,7 @@ import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
 import { normalize } from '../utils/normalize.js';
-import salesTemplates from '../src/salesTemplates.json' assert { type: 'json' };
+import salesTemplates from '../salesTemplates.json' assert { type: 'json' };
 
 console.info("✅ PromptTemplate loaded correctly");
 
