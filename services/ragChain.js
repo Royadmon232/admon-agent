@@ -249,8 +249,13 @@ export async function smartAnswer(question, context = []) {
     return null;
   }
 
+  console.debug('[RAG] Normalized question:', question);
+  console.debug('[RAG] Using column:', kbConfig.embeddingColumnName);
+  console.debug('[RAG] Context length:', context.length);
+
   // Check for greetings first - only if this is the first message
   if (context.length === 0 && /^(היי|שלום|צהריים|ערב טוב)/i.test(question.trim())) {
+    console.debug('[RAG] Detected greeting - returning standard response');
     return "שלום! אני דוני, סוכן ביטוח דירות. איך אוכל לעזור?";
   }
 
@@ -283,28 +288,31 @@ ${conversationHistory}
     
     if (isFollowUp && context.length > 0) {
       // Follow-up detected - answer directly using context only
-      console.info('[LangChain] Follow-up question detected, using context only');
+      console.info('[RAG] Follow-up question detected, using context only');
       
       const response = await llm.invoke([
         { role: 'system', content: contextCheckPrompt },
         { role: 'user', content: 'ענה על השאלה הנוכחית בהתבסס על ההיסטוריה. תן תשובה מקיפה בעברית.' }
       ]);
       
+      console.debug('[RAG] Generated follow-up response');
       return response.content.trim();
     }
 
     // Not a clear follow-up, proceed with vector search
-    console.info('[LangChain] Running vector search...');
+    console.info('[RAG] Running vector search...');
     
     // Split questions if multiple detected
     const questions = splitQuestions(question);
-    console.info(`[LangChain] Processing ${questions.length} question(s)`);
+    console.info(`[RAG] Processing ${questions.length} question(s)`);
 
     // First attempt: vector search WITH context
     let answerGroups = [];
     let foundAnswers = false;
     
     for (const q of questions) {
+      const query = normalize(q);
+      // Use direct vector search without score threshold in params
       const results = await vectorStore.similaritySearchWithScore(
         normalize(q),
         15,
@@ -312,18 +320,21 @@ ${conversationHistory}
       );
       
       // Log raw scores for debugging
-      console.info(`[LangChain] Raw scores for "${q}":`, results.map(([doc, score]) => score).slice(0, 5));
+      console.debug(`[RAG] Raw scores for "${q}":`, results.map(([doc, score]) => score.toFixed(4)));
       
       const answers = results
         .map(([doc, score]) => {
           const content = doc.pageContent || doc.content || '';
-          console.info(`[LangChain] Match found - similarity: ${(1 - score).toFixed(3)}, content: ${content.slice(0, 50)}...`);
+          console.debug(`[RAG] Match found - similarity: ${(1 - score).toFixed(4)}, content: ${content.slice(0, 50)}...`);
           return content;
         })
         .filter(answer => answer && answer.trim().length > 0);
       
       if (answers.length > 0) {
         foundAnswers = true;
+        console.debug(`[RAG] Found ${answers.length} matches for question: ${q}`);
+      } else {
+        console.debug(`[RAG] No matches found for question: ${q}`);
       }
       
       answerGroups.push({
@@ -334,22 +345,20 @@ ${conversationHistory}
 
     // If no answers found, try without context (fallback)
     if (!foundAnswers) {
-      console.info('[LangChain] No matches found, trying fallback search...');
+      console.info('[RAG] No matches found, trying fallback search...');
       answerGroups = [];
       
       // Retry with simplified query
       const simplifiedQuery = normalize(question);
       const fallbackResults = await vectorStore.similaritySearchWithScore(
         simplifiedQuery, 
-        15  // Increase k to get more results before filtering
+        15,
+        { scoreThreshold: 0.60 }
       );
       
+      console.debug(`[RAG] Fallback raw scores:`, fallbackResults.map(([doc, score]) => score.toFixed(4)));
+      
       const fallbackAnswers = fallbackResults
-        .filter(([doc, score]) => {
-          // Convert distance to similarity
-          const similarity = 1 - score;
-          return similarity >= 0.40; // Lower threshold
-        })
         .map(([doc, score]) => {
           const content = doc.pageContent || doc.content || '';
           return content;
@@ -358,6 +367,9 @@ ${conversationHistory}
       
       if (fallbackAnswers.length > 0) {
         foundAnswers = true;
+        console.debug(`[RAG] Found ${fallbackAnswers.length} matches in fallback search`);
+      } else {
+        console.debug('[RAG] No matches in fallback search');
       }
       
       answerGroups = [{
@@ -395,11 +407,12 @@ ${foundAnswers ? 'נמצאו תשובות רלוונטיות במאגר. שלב 
 
     const mergedAnswer = await mergeAnswersWithGPTWithContext(answerGroups, question, systemPromptForMerge);
     
-    console.info('[LangChain] Smart answer generated');
+    console.info('[RAG] Smart answer generated');
+    console.debug('[RAG] Response path:', foundAnswers ? 'langchain' : 'fallback');
     return mergedAnswer;
     
   } catch (error) {
-    console.error('[LangChain] Error generating smart answer:', error.message);
+    console.error('[RAG] Error generating smart answer:', error.message);
     return null;
   }
 }
