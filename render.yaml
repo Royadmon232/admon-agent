@@ -2,9 +2,10 @@ services:
   - type: web
     name: insurance-whatsapp-bot
     env: node
-    buildCommand: npm install
+    buildCommand: |
+      npm install
+      cp marketing_templates.json /opt/render/project/src/
     startCommand: node index.js
-    postbuildCommand: ln -sf /opt/render/project/src/marketing_templates.json /opt/render/project/marketing_templates.json
     envVars:
       - key: NODE_ENV
         value: production
