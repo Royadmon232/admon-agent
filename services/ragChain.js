@@ -10,12 +10,35 @@ import kbConfig from '../src/insuranceKbConfig.js';
 import { normalize } from '../utils/normalize.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 
 // Load sales templates
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const salesTemplates = JSON.parse(readFileSync(join(__dirname, '../../marketing_templates.json'), 'utf8'));
+const rootDir = resolve(__dirname, '../..');
+const templatesPath = join(rootDir, 'marketing_templates.json');
+
+console.info(`[RAG] Loading templates from: ${templatesPath}`);
+
+let salesTemplates;
+try {
+  salesTemplates = JSON.parse(readFileSync(templatesPath, 'utf8'));
+  console.info('[RAG] Successfully loaded marketing templates');
+} catch (error) {
+  console.error('[RAG] Error loading marketing templates:', error.message);
+  // Fallback to default templates if file not found
+  salesTemplates = {
+    LEAD: [
+      "ביטוח דירה מגן על ההשקעה הכי חשובה שלך מפני נזקי מים, גניבה ואש",
+      "פוליסת ביטוח דירה איכותית יכולה לחסוך לך עשרות אלפי שקלים בעת נזק"
+    ],
+    DEFAULT: [
+      "אני כאן לעזור לך להבין את האפשרויות השונות לביטוח דירה",
+      "כל מקרה הוא ייחודי ואני אתאים את ההמלצות לצרכים שלך"
+    ]
+  };
+  console.info('[RAG] Using fallback templates');
+}
 
 console.info("✅ PromptTemplate loaded correctly");
 
