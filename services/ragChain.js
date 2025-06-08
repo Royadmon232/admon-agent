@@ -15,8 +15,7 @@ import { dirname, join, resolve } from 'path';
 // Load sales templates
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const rootDir = resolve(__dirname, '../..');
-const templatesPath = join(rootDir, 'marketing_templates.json');
+const templatesPath = join(process.cwd(), 'marketing_templates.json');
 
 console.info(`[RAG] Loading templates from: ${templatesPath}`);
 
