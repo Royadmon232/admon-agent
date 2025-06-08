@@ -8,6 +8,7 @@ import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
 import { normalize } from '../utils/normalize.js';
+import salesTemplates from '../src/salesTemplates.json' assert { type: 'json' };
 
 console.info("✅ PromptTemplate loaded correctly");
 
@@ -27,7 +28,7 @@ pool.on('connect', () => {
 // Initialize OpenAI components
 const embeddings = new OpenAIEmbeddings({
   openAIApiKey: process.env.OPENAI_API_KEY,
-  modelName: 'text-embedding-3-small'
+  modelName: 'text-embedding-ada-002'
 });
 
 const llm = new ChatOpenAI({
@@ -82,10 +83,10 @@ export async function initializeChain() {
     chain = await createRetrievalChain({
       combineDocsChain: documentChain,
       retriever: vectorStore.asRetriever({
-        k: 8, // Match fallback k value
+        k: 8,
         searchType: 'similarity',
         searchKwargs: {
-          scoreThreshold: 0.60 // Match fallback threshold
+          scoreThreshold: 0.60
         }
       })
     });
@@ -394,9 +395,7 @@ ${context.length === 0 ? 'התחל את התשובה במילים: "שלום! א
 - אל תציג את עצמך כבוט או AI - אתה סוכן ביטוח אמיתי
 
 תבניות שיווק מומלצות:
-- פתיחה: "ביטוח דירה מגן על ההשקעה הכי חשובה שלך מפני נזקי מים, גניבה ואש"
-- הדגשת ערך: "פוליסת ביטוח דירה איכותית יכולה לחסוך לך עשרות אלפי שקלים בעת נזק"
-- סגירה: "אשמח לבנות עבורך הצעת מחיר מותאמת אישית ללא התחייבות"
+${salesTemplates.templates.map(t => `- ${t}`).join('\n')}
 
 היסטוריית השיחה:
 ${conversationHistory}
