@@ -8,7 +8,13 @@ import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
 import { normalize } from '../utils/normalize.js';
-import salesTemplates from '../salesTemplates.json' assert { type: 'json' };
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const salesTemplates = JSON.parse(fs.readFileSync(path.join(__dirname, '../salesTemplates.json'), 'utf8'));
 
 console.info("✅ PromptTemplate loaded correctly");
 
