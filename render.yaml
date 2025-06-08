@@ -4,7 +4,7 @@ services:
     env: node
     buildCommand: |
       npm install
-      cp marketing_templates.json /opt/render/project/src/
+      cp marketing_templates.json /opt/render/project/
     startCommand: node index.js
     envVars:
       - key: NODE_ENV
