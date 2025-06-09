@@ -16,6 +16,9 @@ const client = twilio(
   process.env.TWILIO_AUTH_TOKEN
 );
 
+// Initialize p-queue with concurrency of 5
+const queue = new PQueue({ concurrency: 5 });
+
 // Message deduplication cache
 const messageCache = new Map();
 const DEDUP_WINDOW = 30000; // 30 seconds window for deduplication
@@ -102,6 +105,13 @@ pool.on('connect', (client) => {
   // Set session parameters for each new connection
   client.query('SET statement_timeout = 30000'); // 30 seconds
 });
+
+// Placeholder for OCR functionality - implement with actual OCR service if needed
+async function extractTextFromImage(imageBuffer) {
+  console.log('[OCR] Text extraction from image not yet implemented');
+  // TODO: Implement actual OCR using service like Google Vision API, AWS Textract, etc.
+  return '';
+}
 
 // Main webhook handler
 export async function handleIncomingMessage(message) {
