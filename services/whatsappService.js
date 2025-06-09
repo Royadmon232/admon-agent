@@ -8,6 +8,7 @@ import { setTimeout } from 'timers/promises';
 import pg from 'pg';
 import twilio from 'twilio';
 import { smsFallback } from './twilioService.js';
+import axios from 'axios';
 
 // Initialize Twilio client
 const client = twilio(
@@ -102,150 +103,116 @@ pool.on('connect', (client) => {
   client.query('SET statement_timeout = 30000'); // 30 seconds
 });
 
+// Main webhook handler
 export async function handleIncomingMessage(message) {
+  console.log('[WhatsApp] Received message:', JSON.stringify(message, null, 2));
+  
   try {
-    console.info('[WhatsApp] Received message:', {
-      from: message.from,
-      type: message.type,
-      timestamp: message.timestamp
-    });
-
+    // Extract message details
+    const from = message.From || message.from;
+    const body = message.Body || message.body || '';
+    const messageId = message.MessageSid || message.id;
+    
+    if (!from || !body) {
+      console.warn('[WhatsApp] Missing required fields:', { from, body });
+      return;
+    }
+    
+    // Clean phone number
+    const phone = from.replace('whatsapp:', '').replace('+', '');
+    
     // Check for duplicate message
-    if (isDuplicate(message)) {
-      console.info('[WhatsApp] Ignoring duplicate message');
-      return; // Return without processing
+    if (await isDuplicateMessage(phone, messageId)) {
+      console.log('[WhatsApp] Skipping duplicate message');
+      return;
     }
-
-    // Handle different message types with timeout
-    try {
-      if (message.type === 'text') {
-        console.debug('[WhatsApp] Processing text message:', message.body);
-        await Promise.race([
-          handleTextMessage(message),
-          setTimeout(15000).then(() => {
-            throw new Error('Message processing timeout');
-          })
-        ]);
-      } else if (message.type === 'image') {
-        console.debug('[WhatsApp] Processing image message');
-        await Promise.race([
-          handleImageMessage(message),
-          setTimeout(15000).then(() => {
-            throw new Error('Image processing timeout');
-          })
-        ]);
-      } else {
-        console.warn('[WhatsApp] Unsupported message type:', message.type);
-        await sendMessage(message.from, 'מצטער, אני יכול לענות רק על הודעות טקסט ותמונות.');
-      }
-    } catch (timeoutError) {
-      console.error('[WhatsApp] Processing timeout:', timeoutError);
-      await sendMessage(message.from, 'מצטער, המערכת עמוסה כרגע. אנא נסה שוב בעוד מספר דקות.');
-    }
+    
+    // Store incoming message
+    await storeMessage(phone, body, 'received');
+    
+    // Get conversation history
+    const history = await getConversationHistory(phone);
+    
+    // Process with agent
+    const response = await handleMessage(phone, body);
+    
+    // Send response
+    await sendWhatsAppMessage(phone, response);
+    
+    // Store outgoing message
+    await storeMessage(phone, response, 'sent');
+    
   } catch (error) {
     console.error('[WhatsApp] Error handling message:', error);
-    await sendMessage(message.from, 'מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.');
+    throw error;
   }
 }
 
+// Handle text messages
 async function handleTextMessage(message) {
-  try {
-    console.debug('[WhatsApp] Starting text message processing');
+  const from = message.From.replace('whatsapp:', '');
+  const body = message.Body;
+  const messageId = message.MessageSid;
+  
+  console.log(`📱 Received WhatsApp message from ${from}: ${body}`);
+  
+  // Check for duplicate
+  if (isDuplicate(message)) {
+    console.log('⚠️ Duplicate message detected, skipping');
+    return;
+  }
+  
+  // Store incoming message
+  await storeMessage(from, body, 'user');
+  
+  // Get conversation history  
+  const history = await getConversationHistory(from);
+  
+  // Process message with agent
+  const response = await handleMessage(from, body);
+  
+  if (response) {
+    // Send response back
+    await sendMessage(from, response);
     
-    // Get conversation history with timeout
-    const history = await Promise.race([
-      getConversationHistory(message.from),
-      setTimeout(10000).then(() => {
-        console.warn('[WhatsApp] History retrieval timeout');
-        return [];
-      })
-    ]);
-    
-    console.debug('[WhatsApp] Retrieved conversation history:', {
-      messageCount: history.length,
-      lastMessage: history[history.length - 1]?.message
-    });
+    // Store bot response
+    await storeMessage(from, response, 'bot');
+  }
+}
 
-    // Process with RAG with timeout
-    console.info('[WhatsApp] Sending to RAG for processing');
-    const response = await Promise.race([
-      smartAnswer(message.body, history),
-      setTimeout(20000).then(() => {
-        console.warn('[WhatsApp] RAG processing timeout');
-        return null;
-      })
-    ]);
+// Handle image messages
+async function handleImageMessage(message) {
+  const from = message.From.replace('whatsapp:', '');
+  const mediaUrl = message.MediaUrl0;
+  const caption = message.Body || '';
+  
+  console.log(`📸 Received WhatsApp image from ${from}`);
+  console.log(`Caption: ${caption}`);
+  console.log(`Media URL: ${mediaUrl}`);
+  
+  try {
+    // Download image
+    const imageBuffer = await axios.get(mediaUrl, {
+      responseType: 'arraybuffer',
+      auth: {
+        username: process.env.TWILIO_ACCOUNT_SID,
+        password: process.env.TWILIO_AUTH_TOKEN
+      }
+    });
+    
+    // Extract text from image using OCR or image analysis
+    const text = await extractTextFromImage(imageBuffer.data);
+    
+    // Process extracted text with caption
+    const combinedText = caption ? `${caption}\n\n${text}` : text;
+    const response = await handleMessage(from, combinedText);
     
     if (response) {
-      console.debug('[WhatsApp] Received RAG response');
-      await sendMessage(message.from, response);
-      
-      // Store in history with timeout
-      await Promise.race([
-        storeMessage(message.from, message.body, response),
-        setTimeout(5000).then(() => {
-          console.warn('[WhatsApp] History storage timeout');
-        })
-      ]);
-      console.debug('[WhatsApp] Stored message in history');
-    } else {
-      console.warn('[WhatsApp] No response from RAG');
-      await sendMessage(message.from, 'מצטער, לא הצלחתי לענות על השאלה שלך. אנא נסה לנסח אותה אחרת.');
+      await sendMessage(from, response);
     }
   } catch (error) {
-    console.error('[WhatsApp] Error processing text message:', error);
-    throw error;
-  }
-}
-
-async function handleImageMessage(message) {
-  try {
-    console.debug('[WhatsApp] Starting image message processing');
-    
-    // Download image with timeout
-    const imageBuffer = await Promise.race([
-      downloadMedia(message.mediaId),
-      setTimeout(5000).then(() => {
-        throw new Error('Image download timeout');
-      })
-    ]);
-    console.debug('[WhatsApp] Downloaded image');
-
-    // Process image with OCR with timeout
-    const text = await Promise.race([
-      processImageWithOCR(imageBuffer),
-      setTimeout(5000).then(() => {
-        console.warn('[WhatsApp] OCR processing timeout');
-        return null;
-      })
-    ]);
-    console.debug('[WhatsApp] OCR result:', text ? 'Text found' : 'No text found');
-
-    if (text) {
-      // Process extracted text with timeout
-      console.info('[WhatsApp] Processing extracted text with RAG');
-      const response = await Promise.race([
-        smartAnswer(text, []),
-        setTimeout(10000).then(() => {
-          console.warn('[WhatsApp] RAG processing timeout');
-          return null;
-        })
-      ]);
-      
-      if (response) {
-        console.debug('[WhatsApp] Sending response for image text');
-        await sendMessage(message.from, response);
-      } else {
-        console.warn('[WhatsApp] No RAG response for image text');
-        await sendMessage(message.from, 'מצטער, לא הצלחתי לענות על השאלה מהתמונה. אנא נסה לשלוח את השאלה בטקסט.');
-      }
-    } else {
-      console.warn('[WhatsApp] No text found in image');
-      await sendMessage(message.from, 'מצטער, לא הצלחתי לזהות טקסט בתמונה. אנא נסה לשלוח תמונה ברורה יותר או לכתוב את השאלה בטקסט.');
-    }
-  } catch (error) {
-    console.error('[WhatsApp] Error processing image message:', error);
-    throw error;
+    console.error('❌ Error processing image:', error);
+    await sendMessage(from, 'מצטער, לא הצלחתי לעבד את התמונה. אנא נסה לשלוח טקסט או תמונה ברורה יותר.');
   }
 }
 

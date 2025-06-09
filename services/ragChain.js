@@ -8,7 +8,6 @@ import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
 import { normalize } from '../utils/normalize.js';
-import { withTimeout } from '../utils/llmTimeout.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
@@ -244,13 +243,10 @@ async function mergeAnswersWithGPT(answerGroups, originalQuestion, historyContex
   const userPrompt = `השאלה המקורית של הלקוח: ${originalQuestion}\n\nמידע שנמצא במאגר:\n${contextBlock}\n\n${historyContext}\n\nאנא תן תשובה מקיפה ומקצועית לשאלת הלקוח.`;
 
   try {
-    const response = await withTimeout(
-      llm.invoke([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ]),
-      20000
-    );
+    const response = await llm.invoke([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ]);
     
     return response.content.trim();
   } catch (error) {
@@ -368,10 +364,7 @@ ${conversationHistory}
         { role: 'user', content: 'ענה על השאלה הנוכחית בהתבסס על ההיסטוריה. תן תשובה מקיפה בעברית.' }
       ].filter(m => m && typeof m === 'object' && m.content);
 
-      const response = await withTimeout(
-        llm.invoke(messages),
-        20000
-      );
+      const response = await llm.invoke(messages);
       
       console.debug('[RAG] Generated follow-up response');
       return response.content.trim();
@@ -392,25 +385,19 @@ ${conversationHistory}
       try {
         const query = normalize(q);
         // First attempt with higher threshold (was 0.70, now 0.75)
-        let results = await withTimeout(
-          vectorStore.similaritySearchWithScore(
-            normalize(q),
-            15,
-            { scoreThreshold: 0.75 }
-          ),
-          5000
+        let results = await vectorStore.similaritySearchWithScore(
+          normalize(q),
+          15,
+          { scoreThreshold: 0.75 }
         );
         
         // If no results or low scores, try second attempt with lower threshold (was 0.60, now 0.65)
         if (results.length === 0 || results[0][1] > 0.25) {
           console.debug('[RAG] First attempt failed, trying with lower threshold...');
-          results = await withTimeout(
-            vectorStore.similaritySearchWithScore(
-              normalize(q),
-              15,
-              { scoreThreshold: 0.65 }
-            ),
-            5000
+          results = await vectorStore.similaritySearchWithScore(
+            normalize(q),
+            15,
+            { scoreThreshold: 0.65 }
           );
         }
         
@@ -500,10 +487,7 @@ ${conversationHistory}
         { role: 'user', content: 'ענה על השאלה בצורה מקצועית ומקיפה.' }
       ].filter(m => m && typeof m === 'object' && m.content);
 
-      const response = await withTimeout(
-        llm.invoke(messages),
-        20000
-      );
+      const response = await llm.invoke(messages);
       
       return response.content.trim();
     }
@@ -532,10 +516,7 @@ ${conversationHistory}
 
 נמצאו תשובות רלוונטיות במאגר. שלב אותן לתשובה מקיפה תוך שימוש בסגנון שיווקי-ייעוצי חם וקריאה לפעולה בסוף.`;
 
-    const mergedAnswer = await withTimeout(
-      mergeAnswersWithGPTWithContext(answerGroups, question, systemPromptForMerge),
-      20000
-    );
+    const mergedAnswer = await mergeAnswersWithGPTWithContext(answerGroups, question, systemPromptForMerge);
     
     console.info('[RAG] Smart answer generated');
     console.debug('[RAG] Response path:', foundAnswers ? 'langchain' : 'fallback');
@@ -579,10 +560,7 @@ async function mergeAnswersWithGPTWithContext(answerGroups, originalQuestion, sy
   ].filter(m => m && typeof m === 'object' && m.content);
 
   try {
-    const response = await withTimeout(
-      llm.invoke(messages),
-      20000
-    );
+    const response = await llm.invoke(messages);
     return response.content.trim();
   } catch (error) {
     console.error('[LangChain] Error merging answers with GPT:', error);
