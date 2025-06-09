@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import axios from 'axios';
 import { lookupRelevantQAs } from '../services/vectorSearch.js';
-import { getHistory, appendExchange, updateCustomer } from "../services/memoryService.js";
+import { getHistory, appendExchange, updateCustomer, extractCustomerInfo } from "../services/memoryService.js";
 import { buildSalesResponse, intentDetect } from "../services/salesTemplates.js";
 import { smartAnswer } from "../services/ragChain.js";
 import { sendWapp } from '../services/twilioService.js';
