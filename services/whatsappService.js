@@ -1,7 +1,6 @@
 import { normalize } from '../utils/normalize.js';
 import { createRetrievalChain } from 'langchain/chains/retrieval';
 import { smartAnswer } from './ragChain.js';
-import { checkDuplicateMessage } from '../utils/deduplication.js';
 import { intentDetect, buildSalesResponse } from './salesTemplates.js';
 import { sendWhatsApp } from './twilioService.js';
 import { PQueue } from 'p-queue';
