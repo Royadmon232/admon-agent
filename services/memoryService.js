@@ -1,12 +1,18 @@
 import pg from 'pg';
 import 'dotenv/config';
 
-// Configure PostgreSQL connection pool - prioritize DATABASE_URL for external connections
+// Configure PostgreSQL connection pool with proper SSL and timeout settings
 const pool = new pg.Pool(
   process.env.DATABASE_URL 
     ? { 
         connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: false }
+        ssl: {
+          rejectUnauthorized: process.env.NODE_ENV === 'production',
+          ca: process.env.SSL_CA_CERT // Optional CA certificate for production
+        },
+        statement_timeout: 5000, // 5 seconds timeout for queries
+        query_timeout: 5000,     // 5 seconds timeout for queries
+        connectionTimeoutMillis: 5000 // 5 seconds timeout for connections
       }
     : {
         user: process.env.PGUSER,
@@ -14,40 +20,68 @@ const pool = new pg.Pool(
         database: process.env.PGDATABASE,
         password: process.env.PGPASSWORD,
         port: process.env.PGPORT,
-        ssl: { rejectUnauthorized: false }
+        ssl: {
+          rejectUnauthorized: process.env.NODE_ENV === 'production',
+          ca: process.env.SSL_CA_CERT // Optional CA certificate for production
+        },
+        statement_timeout: 5000,
+        query_timeout: 5000,
+        connectionTimeoutMillis: 5000
       }
 );
 
 // Log successful connection
 pool.on('connect', () => {
   const connectionType = process.env.DATABASE_URL ? 'external DATABASE_URL' : 'individual PG variables';
-  console.info(`✅ PostgreSQL connected successfully for memoryService using ${connectionType}.`);
+  const sslMode = process.env.NODE_ENV === 'production' ? 'with SSL verification' : 'with SSL (verification disabled)';
+  console.info(`✅ PostgreSQL connected successfully for memoryService using ${connectionType} ${sslMode}.`);
+});
+
+// Handle connection errors
+pool.on('error', (err) => {
+  console.error('[memoryService] ⚠️  Unexpected error on idle client:', err);
+  process.exit(-1); // Exit on critical DB errors
 });
 
 // Ensure tables exist
 (async () => {
   try {
-    // Create customers table
+    // Create customers table with additional fields
     await pool.query(`CREATE TABLE IF NOT EXISTS customers (
       phone TEXT PRIMARY KEY,
       first_name TEXT,
-      stage TEXT DEFAULT 'new'
+      last_name TEXT,
+      email TEXT,
+      stage TEXT DEFAULT 'new',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_interaction TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      preferences JSONB DEFAULT '{}'::jsonb
     );`);
     
-    // Create conversation memory table with simple structure
+    // Create conversation memory table with enhanced structure
     await pool.query(`CREATE TABLE IF NOT EXISTS convo_memory (
       phone TEXT PRIMARY KEY,
       history JSONB DEFAULT '[]'::jsonb,
-      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      metadata JSONB DEFAULT '{}'::jsonb,
+      CONSTRAINT fk_customer FOREIGN KEY (phone) REFERENCES customers(phone) ON DELETE CASCADE
     );`);
     
-    // Add column if missing (for existing deployments)
+    // Add columns if missing (for existing deployments)
     await pool.query(`
+      ALTER TABLE customers 
+      ADD COLUMN IF NOT EXISTS last_name TEXT,
+      ADD COLUMN IF NOT EXISTS email TEXT,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS last_interaction TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS preferences JSONB DEFAULT '{}'::jsonb;
+      
       ALTER TABLE convo_memory 
       ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '[]'::jsonb,
-      ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      ADD COLUMN IF NOT EXISTS last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
       
-      -- Ensure primary key exists
+      -- Ensure primary keys and foreign key exist
       DO $$ 
       BEGIN
         IF NOT EXISTS (
@@ -55,6 +89,17 @@ pool.on('connect', () => {
           WHERE conname = 'convo_memory_pkey'
         ) THEN
           ALTER TABLE convo_memory ADD PRIMARY KEY (phone);
+        END IF;
+        
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint 
+          WHERE conname = 'fk_customer'
+        ) THEN
+          ALTER TABLE convo_memory 
+          ADD CONSTRAINT fk_customer 
+          FOREIGN KEY (phone) 
+          REFERENCES customers(phone) 
+          ON DELETE CASCADE;
         END IF;
       END $$;
     `);
@@ -140,12 +185,14 @@ export async function updateCustomer(phone, fieldsObject) {
     const conflictClause = fields.map((field, index) => `${field} = EXCLUDED.${field}`).join(', ');
     
     const query = `
-      INSERT INTO customers (phone, ${fields.join(', ')}) 
-      VALUES ($1, ${fields.map((_, index) => `$${index + 2}`).join(', ')})
-      ON CONFLICT (phone) DO UPDATE SET ${conflictClause}
+      INSERT INTO customers (phone, ${fields.join(', ')}, last_interaction) 
+      VALUES ($1, ${fields.map((_, index) => `$${index + 2}`).join(', ')}, CURRENT_TIMESTAMP)
+      ON CONFLICT (phone) DO UPDATE 
+      SET ${conflictClause}, last_interaction = CURRENT_TIMESTAMP
     `;
     
     await pool.query(query, [phone, ...values]);
+    console.log(`[memoryService] ✅ Updated customer info for ${phone}`);
   } catch (err) {
     console.error('[memoryService] ⚠️  Failed to update customer:', err.message);
     throw err;
@@ -157,13 +204,14 @@ export async function updateCustomer(phone, fieldsObject) {
  * @param {string} phone - Customer phone number
  * @param {string} userMsg - User's message
  * @param {string} botReply - Bot's reply
+ * @param {object} metadata - Optional metadata about the exchange
  * @returns {Promise<void>}
  */
-export async function appendExchange(phone, userMsg, botReply) {
+export async function appendExchange(phone, userMsg, botReply, metadata = {}) {
   try {
     // First ensure the customer exists
     await pool.query(
-      'INSERT INTO customers (phone) VALUES ($1) ON CONFLICT (phone) DO NOTHING',
+      'INSERT INTO customers (phone, last_interaction) VALUES ($1, CURRENT_TIMESTAMP) ON CONFLICT (phone) DO UPDATE SET last_interaction = CURRENT_TIMESTAMP',
       [phone]
     );
 
@@ -172,25 +220,32 @@ export async function appendExchange(phone, userMsg, botReply) {
     try {
       // First try to insert
       await pool.query(
-        `INSERT INTO convo_memory (phone, history, last_updated)
-         VALUES ($1, jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)), CURRENT_TIMESTAMP)`,
-        [phone, userMsg, botReply]
+        `INSERT INTO convo_memory (phone, history, last_updated, metadata)
+         VALUES ($1, jsonb_build_array(jsonb_build_object(
+           'user', $2::text, 
+           'bot', $3::text,
+           'timestamp', CURRENT_TIMESTAMP,
+           'metadata', $4::jsonb
+         )), CURRENT_TIMESTAMP, $4::jsonb)`,
+        [phone, userMsg, botReply, metadata]
       );
     } catch (err) {
       // If insert fails, update existing record
       await pool.query(
         `UPDATE convo_memory 
-         SET history = COALESCE(history, '[]'::jsonb) || jsonb_build_array(jsonb_build_object('user', $2::text, 'bot', $3::text)),
-             last_updated = CURRENT_TIMESTAMP
+         SET history = COALESCE(history, '[]'::jsonb) || jsonb_build_array(jsonb_build_object(
+           'user', $2::text, 
+           'bot', $3::text,
+           'timestamp', CURRENT_TIMESTAMP,
+           'metadata', $4::jsonb
+         )),
+         last_updated = CURRENT_TIMESTAMP,
+         metadata = metadata || $4::jsonb
          WHERE phone = $1`,
-        [phone, userMsg, botReply]
+        [phone, userMsg, botReply, metadata]
       );
     }
     await pool.query('COMMIT');
-    
-    // Also remember last message for backward compatibility
-    await remember(phone, 'lastMsg', userMsg);
-    await remember(phone, 'lastReply', botReply);
     
     console.log(`[memoryService] ✅ Appended exchange for ${phone}`);
   } catch (err) {
@@ -209,15 +264,63 @@ export async function appendExchange(phone, userMsg, botReply) {
 export async function getHistory(phone, maxTurns = 10) {
   try {
     const result = await pool.query(
-      `SELECT history FROM convo_memory WHERE phone = $1`,
+      `SELECT c.first_name, c.last_name, c.stage, m.history, m.metadata 
+       FROM customers c 
+       LEFT JOIN convo_memory m ON c.phone = m.phone 
+       WHERE c.phone = $1`,
       [phone]
     );
     
-    return result.rows[0]?.history.slice(-maxTurns) || [];
+    if (!result.rows[0]) {
+      return { history: [], customer: null };
+    }
+    
+    const { first_name, last_name, stage, history, metadata } = result.rows[0];
+    return {
+      history: history?.slice(-maxTurns) || [],
+      customer: {
+        firstName: first_name,
+        lastName: last_name,
+        stage,
+        metadata
+      }
+    };
   } catch (err) {
     console.error('[memoryService] ⚠️  Failed to get history:', err.message);
-    return [];
+    return { history: [], customer: null };
   }
+}
+
+/**
+ * Extract customer information from a message
+ * @param {string} message - User's message
+ * @returns {object|null} Extracted customer info or null
+ */
+export function extractCustomerInfo(message) {
+  const info = {};
+  
+  // Extract name patterns
+  const namePatterns = [
+    /(?:קוראים לי|שמי|אני) ([^\s]+)/i,
+    /(?:השם שלי|השם) ([^\s]+)/i
+  ];
+  
+  for (const pattern of namePatterns) {
+    const match = message.match(pattern);
+    if (match) {
+      info.first_name = match[1];
+      break;
+    }
+  }
+  
+  // Extract email pattern
+  const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+  const emailMatch = message.match(emailPattern);
+  if (emailMatch) {
+    info.email = emailMatch[0];
+  }
+  
+  return Object.keys(info).length > 0 ? info : null;
 }
 
 export async function smartAnswer(question, context = []) {
