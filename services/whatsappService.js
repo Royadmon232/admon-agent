@@ -594,4 +594,35 @@ export async function logDelivery(phone, message, status, error = null) {
   } catch (err) {
     console.error('❌ Failed to log delivery:', err);
   }
+}
+
+/**
+ * Sends a WhatsApp message with a button (formatted as text since Twilio doesn't support interactive buttons)
+ * @param {string} to - The recipient's phone number
+ * @param {string} message - The message text
+ * @param {string} buttonTitle - The text to display on the button
+ * @param {string} buttonPayload - The payload to send when button is clicked
+ * @returns {Promise<void>}
+ */
+export async function sendWhatsAppMessageWithButton(to, message, buttonTitle, buttonPayload) {
+  try {
+    // Format message with button as text since Twilio doesn't support interactive buttons
+    const formattedMessage = `${message}\n\n[${buttonTitle}]`;
+    const result = await sendWapp(to, formattedMessage);
+    
+    if (result.success) {
+      console.log(`✅ Sent WhatsApp message with button to ${to}`);
+      await logDelivery(to, formattedMessage, 'sent', null);
+    } else {
+      console.error("Error sending WhatsApp message with button:", result.error);
+      // Fallback to regular message
+      console.log("🔄 Falling back to regular message...");
+      await sendWapp(to, `${message}\n\n[${buttonTitle}]`);
+    }
+  } catch (error) {
+    console.error("Error sending WhatsApp message with button:", error);
+    // Fallback to regular message
+    console.log("🔄 Falling back to regular message...");
+    await sendWapp(to, `${message}\n\n[${buttonTitle}]`);
+  }
 } 
