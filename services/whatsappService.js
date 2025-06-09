@@ -574,4 +574,24 @@ export async function checkDatabaseHealth() {
     console.error('❌ Database health check failed:', err);
     return { healthy: false, message: err.message };
   }
+}
+
+/**
+ * Write a delivery attempt to the database.
+ * @param {string} phone - The recipient's phone number
+ * @param {string} message - The message content
+ * @param {string} status - e.g., 'sent', 'failed', etc.
+ * @param {string} error - Error message if any
+ */
+export async function logDelivery(phone, message, status, error = null) {
+  try {
+    await pool.query(
+      `INSERT INTO delivery_log (phone, message, status, error)
+       VALUES ($1, $2, $3, $4)`,
+      [phone, message, status, error]
+    );
+    console.log(`✅ Delivery logged: ${status} for ${phone}`);
+  } catch (err) {
+    console.error('❌ Failed to log delivery:', err);
+  }
 } 
