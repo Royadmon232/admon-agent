@@ -115,7 +115,7 @@ export async function initializeChain() {
         k: 8,
         searchType: 'similarity',
         searchKwargs: {
-          scoreThreshold: 0.60
+          scoreThreshold: 0.70
         }
       })
     });
@@ -336,79 +336,113 @@ ${conversationHistory}
     const questions = splitQuestions(question);
     console.info(`[RAG] Processing ${questions.length} question(s)`);
 
-    // First attempt: vector search WITH context
+    // Process each question with timeout protection
     let answerGroups = [];
     let foundAnswers = false;
     
     for (const q of questions) {
-      const query = normalize(q);
-      // Use direct vector search without score threshold in params
-      const results = await vectorStore.similaritySearchWithScore(
-        normalize(q),
-        15,
-        { scoreThreshold: 0.60 }
-      );
-      
-      // Log raw scores for debugging
-      console.debug(`[RAG] Raw scores for "${q}":`, results.map(([doc, score]) => score.toFixed(4)));
-      
-      const answers = results
-        .map(([doc, score]) => {
-          const content = doc.pageContent || doc.content || '';
-          console.debug(`[RAG] Match found - similarity: ${(1 - score).toFixed(4)}, content: ${content.slice(0, 50)}...`);
-          return content;
-        })
-        .filter(answer => answer && answer.trim().length > 0);
-      
-      if (answers.length > 0) {
-        foundAnswers = true;
-        console.debug(`[RAG] Found ${answers.length} matches for question: ${q}`);
-      } else {
-        console.debug(`[RAG] No matches found for question: ${q}`);
+      try {
+        const query = normalize(q);
+        // First attempt with higher threshold
+        let results = await Promise.race([
+          vectorStore.similaritySearchWithScore(
+            normalize(q),
+            15,
+            { scoreThreshold: 0.70 }
+          ),
+          setTimeout(5000).then(() => {
+            console.warn(`[RAG] Timeout for question: ${q}`);
+            return [];
+          })
+        ]);
+        
+        // If no results or low scores, try second attempt with lower threshold
+        if (results.length === 0 || results[0][1] > 0.3) {
+          console.debug('[RAG] First attempt failed, trying with lower threshold...');
+          results = await Promise.race([
+            vectorStore.similaritySearchWithScore(
+              normalize(q),
+              15,
+              { scoreThreshold: 0.60 }
+            ),
+            setTimeout(5000).then(() => {
+              console.warn(`[RAG] Timeout for second attempt on question: ${q}`);
+              return [];
+            })
+          ]);
+        }
+        
+        // Log raw scores for debugging
+        console.debug(`[RAG] Raw scores for "${q}":`, results.map(([doc, score]) => score.toFixed(4)));
+        
+        const answers = results
+          .map(([doc, score]) => {
+            const content = doc.pageContent || doc.content || '';
+            console.debug(`[RAG] Match found - similarity: ${(1 - score).toFixed(4)}, content: ${content.slice(0, 50)}...`);
+            return content;
+          })
+          .filter(answer => answer && answer.trim().length > 0);
+        
+        if (answers.length > 0) {
+          foundAnswers = true;
+          console.debug(`[RAG] Found ${answers.length} matches for question: ${q}`);
+        } else {
+          console.debug(`[RAG] No matches found for question: ${q}`);
+        }
+        
+        answerGroups.push({
+          question: q,
+          answers: answers
+        });
+      } catch (error) {
+        console.error(`[RAG] Error processing question "${q}":`, error);
+        answerGroups.push({
+          question: q,
+          answers: []
+        });
       }
-      
-      answerGroups.push({
-        question: q,
-        answers: answers
-      });
     }
 
-    // If no answers found, try without context (fallback)
+    // If no answers found, let GPT-4o answer directly
     if (!foundAnswers) {
-      console.info('[RAG] No matches found, trying fallback search...');
-      answerGroups = [];
+      console.info('[RAG] No matches found, letting GPT-4o answer directly...');
       
-      // Retry with simplified query
-      const simplifiedQuery = normalize(question);
-      const fallbackResults = await vectorStore.similaritySearchWithScore(
-        simplifiedQuery, 
-        15,
-        { scoreThreshold: 0.60 }
-      );
-      
-      console.debug(`[RAG] Fallback raw scores:`, fallbackResults.map(([doc, score]) => score.toFixed(4)));
-      
-      const fallbackAnswers = fallbackResults
-        .map(([doc, score]) => {
-          const content = doc.pageContent || doc.content || '';
-          return content;
+      const gptPrompt = `
+אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. אתה מדבר בעברית בגוף ראשון ומשתמש בסגנון שיווקי-ייעוצי.
+
+${context.length === 0 ? 'התחל את התשובה במילים: "שלום! אני דוני, סוכן ביטוח דירות..."' : 'המשך את השיחה באופן טבעי, בלי להציג את עצמך שוב.'}
+
+השתמש בסגנון שיווקי-ייעוצי:
+- הדגש את היתרונות והכיסויים האופציונליים
+- השתמש בשפה משכנעת אך מקצועית
+- הצג את עצמך כמומחה בתחום ביטוח הדירות
+- השתמש בשפה אישית ונעימה
+- הדגש את הערך והביטחון שהלקוח מקבל
+- הימנע מחזרה על מידע שכבר נאמר בשיחה
+- אל תציג את עצמך כבוט או AI - אתה סוכן ביטוח אמיתי
+
+היסטוריית השיחה:
+${conversationHistory}
+
+שאלה נוכחית: ${question}
+
+אנא תן תשובה מקיפה ומקצועית לשאלת הלקוח, תוך שימוש בידע הכללי שלך על ביטוח דירות.`;
+
+      const response = await Promise.race([
+        llm.invoke([
+          { role: 'system', content: gptPrompt },
+          { role: 'user', content: 'ענה על השאלה בצורה מקצועית ומקיפה.' }
+        ]),
+        setTimeout(20000).then(() => {
+          console.warn('[RAG] GPT timeout - falling back to simple response');
+          return { content: 'מצטער, לא הצלחתי לענות על השאלה כרגע. אשמח לעזור לך עם שאלות ספציפיות על ביטוח דירה.' };
         })
-        .filter(answer => answer && answer.trim().length > 0);
+      ]);
       
-      if (fallbackAnswers.length > 0) {
-        foundAnswers = true;
-        console.debug(`[RAG] Found ${fallbackAnswers.length} matches in fallback search`);
-      } else {
-        console.debug('[RAG] No matches in fallback search');
-      }
-      
-      answerGroups = [{
-        question: question,
-        answers: fallbackAnswers
-      }];
+      return response.content.trim();
     }
 
-    // Merge answers or let GPT generate if nothing found
+    // Merge answers with GPT-4o
     const systemPromptForMerge = `
 אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. אתה מדבר בעברית בגוף ראשון ומשתמש בסגנון שיווקי-ייעוצי.
 
@@ -423,26 +457,28 @@ ${context.length === 0 ? 'התחל את התשובה במילים: "שלום! א
 - הימנע מחזרה על מידע שכבר נאמר בשיחה
 - אל תציג את עצמך כבוט או AI - אתה סוכן ביטוח אמיתי
 
-תבניות שיווק מומלצות:
-${salesTemplates.LEAD ? salesTemplates.LEAD.map(t => `- ${t}`).join('\n') : ''}
-${salesTemplates.DEFAULT ? salesTemplates.DEFAULT.map(t => `- ${t}`).join('\n') : ''}
-
 היסטוריית השיחה:
 ${conversationHistory}
 
 שאלה נוכחית: ${question}
 
-${foundAnswers ? 'נמצאו תשובות רלוונטיות במאגר. שלב אותן לתשובה מקיפה תוך שימוש בסגנון שיווקי-ייעוצי.' : 'לא נמצאו תשובות במאגר. ענה מהידע הכללי שלך תוך שימוש בסגנון שיווקי-ייעוצי.'}`;
+נמצאו תשובות רלוונטיות במאגר. שלב אותן לתשובה מקיפה תוך שימוש בסגנון שיווקי-ייעוצי.`;
 
-    const mergedAnswer = await mergeAnswersWithGPTWithContext(answerGroups, question, systemPromptForMerge);
+    const mergedAnswer = await Promise.race([
+      mergeAnswersWithGPTWithContext(answerGroups, question, systemPromptForMerge),
+      setTimeout(20000).then(() => {
+        console.warn('[RAG] Merge timeout - falling back to simple response');
+        return 'מצטער, לא הצלחתי לענות על השאלה כרגע. אשמח לעזור לך עם שאלות ספציפיות על ביטוח דירה.';
+      })
+    ]);
     
     console.info('[RAG] Smart answer generated');
     console.debug('[RAG] Response path:', foundAnswers ? 'langchain' : 'fallback');
     return mergedAnswer;
     
   } catch (error) {
-    console.error('[RAG] Error generating smart answer:', error.message);
-    return null;
+    console.error('[RAG] Error in smartAnswer:', error);
+    throw error;
   }
 }
 
@@ -473,12 +509,10 @@ async function mergeAnswersWithGPTWithContext(answerGroups, originalQuestion, sy
     : `השאלה המקורית של הלקוח: ${originalQuestion}\n\nלא נמצא מידע ספציפי במאגר שלנו. אנא ענה מהידע הכללי שלך בצורה מקצועית ומקיפה.`;
 
   try {
-    const messages = [
-      new HumanMessage(systemPrompt),
-      new HumanMessage(userPrompt)
-    ];
-    
-    const response = await llm.invoke(messages);
+    const response = await llm.invoke([
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ]);
     return response.content.trim();
   } catch (error) {
     console.error('[LangChain] Error merging answers with GPT:', error);

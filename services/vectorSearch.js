@@ -27,9 +27,9 @@ const pool = new pg.Pool({
     rejectUnauthorized: process.env.NODE_ENV === 'production',
     ca: process.env.SSL_CA_CERT // Optional CA certificate for production
   },
-  statement_timeout: 5000, // 5 seconds timeout for queries
-  query_timeout: 5000,     // 5 seconds timeout for queries
-  connectionTimeoutMillis: 5000 // 5 seconds timeout for connections
+  statement_timeout: 10000, // 10 seconds timeout for queries
+  query_timeout: 10000,     // 10 seconds timeout for queries
+  connectionTimeoutMillis: 10000 // 10 seconds timeout for connections
 });
 
 // Log successful connection

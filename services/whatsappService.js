@@ -113,7 +113,7 @@ async function handleTextMessage(message) {
     // Get conversation history with timeout
     const history = await Promise.race([
       getConversationHistory(message.from),
-      setTimeout(5000).then(() => {
+      setTimeout(10000).then(() => {
         console.warn('[WhatsApp] History retrieval timeout');
         return [];
       })
@@ -128,7 +128,7 @@ async function handleTextMessage(message) {
     console.info('[WhatsApp] Sending to RAG for processing');
     const response = await Promise.race([
       smartAnswer(message.body, history),
-      setTimeout(10000).then(() => {
+      setTimeout(20000).then(() => {
         console.warn('[WhatsApp] RAG processing timeout');
         return null;
       })

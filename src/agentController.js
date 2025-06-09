@@ -13,9 +13,9 @@ const PRIMARY_MODEL = 'text-embedding-3-small';
 const FALLBACK_MODEL = 'text-embedding-ada-002';
 
 // Timeout constants
-const OPENAI_TIMEOUT = 10000; // 10 seconds for OpenAI calls
-const RAG_TIMEOUT = 5000;    // 5 seconds for RAG operations
-const DB_TIMEOUT = 5000;     // 5 seconds for database operations
+const OPENAI_TIMEOUT = 20000; // 20 seconds for OpenAI calls
+const RAG_TIMEOUT = 10000;    // 10 seconds for RAG operations
+const DB_TIMEOUT = 10000;     // 10 seconds for database operations
 
 // Load knowledge base once at startup
 let KNOWLEDGE = [];
@@ -122,10 +122,11 @@ export async function semanticLookup(userMsg, memory = {}) {
   } catch (error) {
     if (error.message === 'OpenAI API timeout') {
       console.error("[semanticLookup] OpenAI API timeout");
-      return "מצטער, המערכת עמוסה כרגע. אנא נסה שוב בעוד מספר דקות.";
+      // Don't return fallback immediately, let the caller handle it
+      throw error;
     }
     console.error("Error calling GPT-4o:", error.response?.data || error.message);
-    return "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
+    throw error;
   }
 }
 
@@ -161,6 +162,24 @@ export async function handleMessage(phone, userMsg) {
     const intent = intentDetect(normalizedMsg);
     console.info("[Intent Detected]:", intent);
 
+    // Handle greeting intent directly without RAG or marketing flow
+    if (intent === 'greeting') {
+      const greetingResponse = buildSalesResponse(intent, { ...customer, history: [] });
+      
+      // Append exchange to conversation history with timeout
+      await Promise.race([
+        appendExchange(phone, normalizedMsg, greetingResponse, {
+          intent,
+          timestamp: new Date().toISOString()
+        }),
+        setTimeout(DB_TIMEOUT).then(() => {
+          console.warn('[handleMessage] History append timeout');
+        })
+      ]);
+      
+      return greetingResponse;
+    }
+
     // Build context from history
     const context = history.map(exchange => ({
       user: exchange.user,
@@ -182,29 +201,83 @@ export async function handleMessage(phone, userMsg) {
         ]);
       } else {
         // For other intents, try RAG first
-        baseResponse = await Promise.race([
-          smartAnswer(normalizedMsg, context) ||
-          semanticLookup(normalizedMsg, { ...customer, history: context }),
-          setTimeout(RAG_TIMEOUT).then(() => {
-            console.warn('[handleMessage] RAG response timeout');
-            return null;
-          })
-        ]);
+        try {
+          baseResponse = await Promise.race([
+            smartAnswer(normalizedMsg, context) ||
+            semanticLookup(normalizedMsg, { ...customer, history: context }),
+            setTimeout(RAG_TIMEOUT).then(() => {
+              console.warn('[handleMessage] RAG response timeout');
+              return null;
+            })
+          ]);
+        } catch (error) {
+          console.error('[handleMessage] RAG error:', error);
+          // Try direct GPT response as fallback
+          try {
+            const gptResponse = await Promise.race([
+              axios.post(
+                "https://api.openai.com/v1/chat/completions",
+                {
+                  model: "gpt-4o",
+                  messages: [
+                    {
+                      role: "system",
+                      content: `אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. דבר בעברית בגוף ראשון.
+היסטוריית השיחה:
+${context.map(exchange => `User: ${exchange.user}\nBot: ${exchange.bot}`).join('\n')}
+
+השתמש בסגנון שיווקי-ייעוצי:
+- הדגש את היתרונות והכיסויים האופציונליים
+- השתמש בשפה משכנעת אך מקצועית
+- הצג את עצמך כמומחה בתחום ביטוח הדירות
+- השתמש בשפה אישית ונעימה
+- הדגש את הערך והביטחון שהלקוח מקבל
+- הימנע מחזרה על מידע שכבר נאמר בשיחה
+- אל תציג את עצמך כבוט או AI - אתה סוכן ביטוח אמיתי`
+                    },
+                    { role: "user", content: normalizedMsg }
+                  ],
+                  temperature: 0.7,
+                  max_tokens: 500
+                },
+                {
+                  headers: {
+                    "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+                    "Content-Type": "application/json"
+                  },
+                  timeout: OPENAI_TIMEOUT
+                }
+              ),
+              setTimeout(OPENAI_TIMEOUT).then(() => {
+                throw new Error('OpenAI API timeout');
+              })
+            ]);
+            baseResponse = gptResponse.data.choices[0].message.content.trim();
+          } catch (gptError) {
+            console.error('[handleMessage] GPT fallback error:', gptError);
+            baseResponse = null;
+          }
+        }
       }
     } catch (error) {
       console.error('[handleMessage] Error getting base response:', error);
       baseResponse = null;
     }
 
-    // If no base response, use sales template
+    // If no base response after all attempts, use sales template as last resort
     if (!baseResponse) {
-      baseResponse = await Promise.race([
-        buildSalesResponse(intent, { ...customer, history: context }),
-        setTimeout(RAG_TIMEOUT).then(() => {
-          console.warn('[handleMessage] Fallback sales response timeout');
-          return "מצטער, המערכת עמוסה כרגע. אנא נסה שוב בעוד מספר דקות.";
-        })
-      ]);
+      try {
+        baseResponse = await Promise.race([
+          buildSalesResponse(intent, { ...customer, history: context }),
+          setTimeout(RAG_TIMEOUT).then(() => {
+            console.warn('[handleMessage] Fallback sales response timeout');
+            return "מצטער, המערכת עמוסה כרגע. אנא נסה שוב בעוד מספר דקות.";
+          })
+        ]);
+      } catch (error) {
+        console.error('[handleMessage] Fallback error:', error);
+        baseResponse = "מצטער, המערכת עמוסה כרגע. אנא נסה שוב בעוד מספר דקות.";
+      }
     }
 
     // Add sales template based on intent if not already a sales response

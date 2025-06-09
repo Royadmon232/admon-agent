@@ -3,10 +3,61 @@ import templates from "../marketing_templates.json" with { type: "json" };
 /**
  * Detects user intent based on Hebrew text patterns
  * @param {string} text - User input text
- * @returns {string} Intent type: 'lead_gen' | 'price_pushback' | 'close' | 'default'
+ * @returns {string} Intent type: 'greeting' | 'lead_gen' | 'price_pushback' | 'close' | 'default'
  */
 export function intentDetect(text) {
   const lowerText = text.toLowerCase();
+  
+  // Greeting patterns - both Hebrew and English
+  const greetingPatterns = [
+    // Hebrew greetings
+    /^שלום$/,
+    /^היי$/,
+    /^הי$/,
+    /^שלום שלום$/,
+    /^היי היי$/,
+    /^הי הי$/,
+    /^שלום!$/,
+    /^היי!$/,
+    /^הי!$/,
+    /^שלום שלום!$/,
+    /^היי היי!$/,
+    /^הי הי!$/,
+    /^בוקר טוב$/,
+    /^צהריים טובים$/,
+    /^ערב טוב$/,
+    /^לילה טוב$/,
+    /^שלום לך$/,
+    /^היי לך$/,
+    /^הי לך$/,
+    /^שלום לך!$/,
+    /^היי לך!$/,
+    /^הי לך!$/,
+    // English greetings
+    /^hi$/,
+    /^hello$/,
+    /^hey$/,
+    /^hi!$/,
+    /^hello!$/,
+    /^hey!$/,
+    /^good morning$/,
+    /^good afternoon$/,
+    /^good evening$/,
+    /^good night$/,
+    // Mixed language greetings
+    /^שלום hi$/,
+    /^hi שלום$/,
+    /^היי hello$/,
+    /^hello היי$/,
+    /^הי hey$/,
+    /^hey הי$/
+  ];
+  
+  // Check for greetings first
+  if (greetingPatterns.some(pattern => pattern.test(lowerText))) {
+    console.debug('[IntentDetect] Greeting detected:', lowerText);
+    return 'greeting';
+  }
   
   // Lead generation patterns - interest in insurance
   const leadPatterns = [
@@ -122,6 +173,13 @@ export function buildSalesResponse(intent, memory = {}) {
   
   // Map intent to template array
   switch (intent) {
+    case 'greeting':
+      // Simple, friendly greeting response without marketing content
+      if (memory.firstName) {
+        return `שלום ${memory.firstName}! אני דוני, סוכן ביטוח דירות. איך אוכל לעזור לך היום? 🤝`;
+      } else {
+        return "שלום! אני דוני, סוכן ביטוח דירות. איך אוכל לעזור לך היום? 🤝";
+      }
     case 'lead_gen':
       templateArray = templates.LEAD;
       break;
@@ -141,9 +199,17 @@ export function buildSalesResponse(intent, memory = {}) {
   const randomIndex = Math.floor(Math.random() * templateArray.length);
   let response = templateArray[randomIndex];
   
+  // Track which placeholders were found and replaced
+  const foundPlaceholders = {
+    name: false,
+    city: false,
+    home_value: false
+  };
+  
   // Replace placeholders with user data if available
   if (memory.firstName) {
     response = response.replace(/\{\{name\}\}/g, memory.firstName);
+    foundPlaceholders.name = true;
   } else {
     // Remove {{name}} placeholder if no firstName available
     response = response.replace(/\{\{name\}\},?\s*/g, '');
@@ -152,20 +218,46 @@ export function buildSalesResponse(intent, memory = {}) {
   // Add city-specific content if available
   if (memory.city) {
     response = response.replace(/\{\{city\}\}/g, memory.city);
+    foundPlaceholders.city = true;
+  } else {
+    // Replace city placeholder with a general term
+    response = response.replace(/\{\{city\}\}/g, 'האזור שלך');
   }
   
   // Add home value specific content if available
   if (memory.homeValue) {
     const value = parseInt(memory.homeValue);
     if (!isNaN(value)) {
+      let replacement;
       if (value > 2000000) {
-        response = response.replace(/\{\{home_value\}\}/g, 'נכס יוקרתי');
+        replacement = 'נכס יוקרתי';
       } else if (value > 1000000) {
-        response = response.replace(/\{\{home_value\}\}/g, 'נכס בעל ערך');
+        replacement = 'נכס בעל ערך';
       } else {
-        response = response.replace(/\{\{home_value\}\}/g, 'נכס');
+        replacement = 'נכס';
       }
+      response = response.replace(/\{\{home_value\}\}/g, replacement);
+      foundPlaceholders.home_value = true;
+    } else {
+      // Invalid home value, use general term
+      response = response.replace(/\{\{home_value\}\}/g, 'הנכס');
     }
+  } else {
+    // No home value, use general term
+    response = response.replace(/\{\{home_value\}\}/g, 'הנכס');
+  }
+  
+  // Log any remaining placeholders that weren't replaced
+  const remainingPlaceholders = response.match(/\{\{[^}]+\}\}/g);
+  if (remainingPlaceholders) {
+    console.warn('[SalesTemplates] Unhandled placeholders found:', {
+      template: response,
+      placeholders: remainingPlaceholders,
+      memory: memory
+    });
+    
+    // Replace any remaining placeholders with general terms
+    response = response.replace(/\{\{[^}]+\}\}/g, 'הנכס');
   }
   
   // Add emoji if not present
@@ -173,6 +265,13 @@ export function buildSalesResponse(intent, memory = {}) {
       !response.includes('💰') && !response.includes('🤝') && !response.includes('⭐')) {
     response += ' 💪';
   }
+  
+  // Log successful placeholder replacements
+  console.debug('[SalesTemplates] Placeholder replacements:', {
+    found: foundPlaceholders,
+    memory: memory,
+    finalResponse: response
+  });
   
   return response;
 } 
