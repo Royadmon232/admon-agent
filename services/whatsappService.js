@@ -2,7 +2,7 @@ import { normalize } from '../utils/normalize.js';
 import { createRetrievalChain } from 'langchain/chains/retrieval';
 import { smartAnswer } from './ragChain.js';
 import { intentDetect, buildSalesResponse } from './salesTemplates.js';
-import { sendWhatsApp } from './twilioService.js';
+import { sendWapp } from './twilioService.js';
 import PQueue from 'p-queue';
 import { setTimeout } from 'timers/promises';
 import pg from 'pg';
@@ -498,17 +498,15 @@ export async function sendWhatsAppMessage(to, body, retries = 3) {
         bodyLength: body.length
       });
 
-      const message = await client.messages.create({
-        body: body,
-        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-        to: `whatsapp:${to}`,
-        // Add timeout for Twilio API call
-        timeout: 15000 // 15 seconds
-      });
-
-      console.log(`✅ Message sent successfully: ${message.sid}`);
-      await logDelivery(to, body, 'sent', null);
-      return message;
+      const result = await sendWapp(to, body);
+      
+      if (result.success) {
+        console.log(`✅ Message sent successfully: ${result.sid}`);
+        await logDelivery(to, body, 'sent', null);
+        return result;
+      } else {
+        throw new Error(result.error || 'Failed to send message');
+      }
     } catch (error) {
       lastError = error;
       console.error(`❌ Attempt ${attempt} failed:`, error.message);
