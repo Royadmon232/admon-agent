@@ -324,7 +324,7 @@ async function storeMessage(phoneNumber, userMessage, botResponse) {
 }
 
 // Initialize database tables with enhanced customer fields
-async function initDatabase() {
+export async function initDatabase() {
   try {
     // Create enhanced customers table
     await pool.query(`
