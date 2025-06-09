@@ -309,7 +309,7 @@ export async function smartAnswer(question, context = []) {
   // Check for greetings first - only if this is the first message
   if (context.length === 0 && /^(היי|שלום|צהריים|ערב טוב)/i.test(question.trim())) {
     console.debug('[RAG] Detected greeting - returning standard response');
-    return "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך �� איך אוכל לעזור?";
+    return "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך איך אוכל לעזור?";
   }
 
   // Check if question is out of scope
