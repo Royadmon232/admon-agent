@@ -40,7 +40,7 @@ import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
 import fs from "fs";
-import { handleMessage, processMessage } from './src/agentController.js';
+import { handleMessage } from './src/agentController.js';
 import { sendWapp, smsFallback } from "./services/twilioService.js";
 import PQueue from 'p-queue';
 
@@ -239,7 +239,7 @@ function isQuoteIntent(text) {
 // =============================
 // Core Message Processing Logic
 // =============================
-async function processMessage(userMessageText, fromId, simulateMode = false) {
+async function processLocalMessage(userMessageText, fromId, simulateMode = false) {
   let replyToSend = "";
 
   // Ensure conversationMemory and userSessionData for 'fromId' exist
@@ -391,7 +391,7 @@ async function handleMessage(phone, msg, messageId = null) {
     }
 
     // Process the message with enhanced memory
-    const { response, memory: updatedMemory } = await processMessage(msg, memory);
+    const { response, memory: updatedMemory } = await processLocalMessage(msg, memory);
     
     // Update customer record with any changes
     if (updatedMemory.stage !== memory.stage) {
@@ -628,7 +628,7 @@ app.post('/simulate', async (req, res) => {
   }
   console.log(`SIMULATE: Received message: "${message}" from: ${from}`);
   try {
-    const reply = await processMessage(message, from, true); // true for simulateMode
+    const reply = await processLocalMessage(message, from, true); // true for simulateMode
     res.send({ reply });
   } catch (error) {
     console.error("SIMULATE: Error processing message:", error);
