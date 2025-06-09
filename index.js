@@ -365,7 +365,7 @@ async function processLocalMessage(userMessageText, fromId, simulateMode = false
 const messageQueue = new PQueue({ concurrency: 5, interval: 1000, intervalCap: 5 });
 
 // Enhanced message handling with returning user support
-async function handleMessage(phone, msg, messageId = null) {
+async function handleLocalMessage(phone, msg, messageId = null) {
   console.info(`\n📱 Processing message from ${phone}: "${msg.substring(0, 50)}..."`);
   const startTime = Date.now();
 
@@ -408,10 +408,9 @@ async function handleMessage(phone, msg, messageId = null) {
     const processingTime = Date.now() - startTime;
     console.info(`✅ Message processed in ${processingTime}ms`);
   } catch (error) {
-    console.error('[handleMessage] Error:', error);
-    const errorResponse = "מצטער, אירעה שגיאה. אנא נסה שוב או פנה לנציג.";
-    await sendWhatsAppMessage(phone, errorResponse);
-    await appendExchange(phone, msg, errorResponse);
+    console.error('[handleLocalMessage] Error:', error);
+    const errorMsg = "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
+    await sendWhatsAppMessage(phone, errorMsg);
   }
 }
 
@@ -572,49 +571,39 @@ app.post('/simulate', async (req, res) => {
 // 2. WhatsApp Message Handler (POST /webhook)
 // =============================
 app.post("/webhook", async (req, res) => {
-  console.info('[Webhook] Received:', JSON.stringify(req.body, null, 2));
-  
   try {
-    const { object, entry } = req.body;
-    
-    if (object === "whatsapp_business_account") {
-      // Meta WhatsApp webhook
-      for (const e of entry || []) {
-        for (const change of e.changes || []) {
-          if (change.field === "messages") {
-            for (const msg of change.value.messages || []) {
-              if (msg.type === "text") {
-                const phone = msg.from;
-                const text = msg.text.body;
-                const messageId = msg.id;
-                
-                // Queue message with MessageId for duplicate detection
-                await messageQueue.add(async () => {
-                  await handleMessage(phone, text, messageId);
-                });
-              }
-            }
-          }
-        }
+    const { body } = req;
+    if (body.object) {
+      if (
+        body.entry &&
+        body.entry[0].changes &&
+        body.entry[0].changes[0] &&
+        body.entry[0].changes[0].value.messages &&
+        body.entry[0].changes[0].value.messages[0]
+      ) {
+        const phone_number_id =
+          body.entry[0].changes[0].value.metadata.phone_number_id;
+        const from = body.entry[0].changes[0].value.messages[0].from;
+        const msg_body = body.entry[0].changes[0].value.messages[0].text.body;
+        const messageId = body.entry[0].changes[0].value.messages[0].id;
+
+        console.log(`📥 Received message from ${from}: ${msg_body}`);
+
+        // Add message to queue for rate limiting
+        messageQueue.add(async () => {
+          await handleLocalMessage(from, msg_body, messageId);
+        });
+
+        res.status(200).send("EVENT_RECEIVED");
+      } else {
+        res.sendStatus(404);
       }
     } else {
-      // Twilio webhook
-      const { Body, From, MessageSid } = req.body;
-      
-      if (Body && From) {
-        const phoneNumber = From.replace('whatsapp:', '');
-        
-        // Queue message with MessageSid for duplicate detection
-        await messageQueue.add(async () => {
-          await handleMessage(phoneNumber, Body, MessageSid);
-        });
-      }
+      res.sendStatus(404);
     }
-    
-    res.status(200).send('OK');
   } catch (error) {
-    console.error('[Webhook] Error:', error);
-    res.status(500).send('Internal server error');
+    console.error("Error in webhook:", error);
+    res.sendStatus(500);
   }
 });
 
