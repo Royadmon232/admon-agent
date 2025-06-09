@@ -1,6 +1,18 @@
 import 'dotenv/config';  // ensures DATABASE_URL loaded
 import "./vectorIndexer.js";
 import { initializeChain } from './services/ragChain.js';
+import {
+  sendWhatsAppMessage,
+  sendWhatsAppMessageWithButton,
+  logDelivery,
+  appendExchange,
+  isDuplicateMessage,
+  updateCustomer,
+  getMemory,
+  initDatabase,
+  cleanupOldConversations,
+  checkDatabaseHealth
+} from './services/whatsappService.js';
 
 /*
 ============================
@@ -30,6 +42,8 @@ import bodyParser from "body-parser";
 import fs from "fs";
 import { handleMessage, sendWhatsAppMessage } from './src/agentController.js';
 import { sendWapp, smsFallback } from "./services/twilioService.js";
+import { processMessage } from './services/agentController.js';
+import PQueue from 'p-queue';
 
 const app = express();
 app.use(express.static('public'));
@@ -348,6 +362,171 @@ async function processMessage(userMessageText, fromId, simulateMode = false) {
   }
 }
 
+// Create message queue for rate limiting
+const messageQueue = new PQueue({ concurrency: 5, interval: 1000, intervalCap: 5 });
+
+// Enhanced message handling with returning user support
+async function handleMessage(phone, msg, messageId = null) {
+  console.info(`\n📱 Processing message from ${phone}: "${msg.substring(0, 50)}..."`);
+  const startTime = Date.now();
+
+  try {
+    // Check for duplicate message
+    if (messageId && await isDuplicateMessage(phone, messageId)) {
+      console.log(`⚠️ Skipping duplicate message: ${messageId}`);
+      return;
+    }
+
+    // Get enhanced memory with returning user detection
+    const memory = await getMemory(phone);
+    
+    // Handle returning users with personalized greeting
+    if (memory.isReturning && memory.conversationHistory.length === 0) {
+      const name = memory.firstName || "";
+      const welcomeBack = `שלום שוב${name ? ` ${name}` : ""}! 😊 טוב לשמוע ממך. במה אוכל לעזור לך היום?`;
+      await sendWhatsAppMessage(phone, welcomeBack);
+      await appendExchange(phone, msg, welcomeBack);
+      
+      // Update last interaction
+      await updateCustomer(phone, { last_interaction: new Date() });
+    }
+
+    // Process the message with enhanced memory
+    const { response, memory: updatedMemory } = await processMessage(msg, memory);
+    
+    // Update customer record with any changes
+    if (updatedMemory.stage !== memory.stage) {
+      await updateCustomer(phone, { stage: updatedMemory.stage });
+    }
+    
+    // Extract and save any new information from the message
+    await extractAndSaveInfo(phone, msg, memory);
+
+    // Send response
+    await sendWhatsAppMessage(phone, response);
+    await appendExchange(phone, msg, response);
+
+    const processingTime = Date.now() - startTime;
+    console.info(`✅ Message processed in ${processingTime}ms`);
+  } catch (error) {
+    console.error('[handleMessage] Error:', error);
+    const errorResponse = "מצטער, אירעה שגיאה. אנא נסה שוב או פנה לנציג.";
+    await sendWhatsAppMessage(phone, errorResponse);
+    await appendExchange(phone, msg, errorResponse);
+  }
+}
+
+// Extract and save customer information from messages
+async function extractAndSaveInfo(phone, msg, memory) {
+  try {
+    const lowerMsg = msg.toLowerCase();
+    
+    // Extract city if mentioned
+    const cityPatterns = [
+      /גר(ה?) ב(.+)/,
+      /מ(.+) אני/,
+      /אני מ(.+)/,
+      /בעיר (.+)/
+    ];
+    
+    for (const pattern of cityPatterns) {
+      const match = msg.match(pattern);
+      if (match && match[1]) {
+        const city = match[1].trim();
+        await updateCustomer(phone, { city });
+        console.log(`📍 Extracted city: ${city}`);
+        break;
+      }
+    }
+    
+    // Extract home value if mentioned
+    const valuePattern = /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:אלף|מיליון)?/;
+    if (lowerMsg.includes('שווי') || lowerMsg.includes('ערך')) {
+      const match = msg.match(valuePattern);
+      if (match) {
+        let value = match[1].replace(/,/g, '');
+        if (lowerMsg.includes('מיליון')) {
+          value = parseInt(value) * 1000000;
+        } else if (lowerMsg.includes('אלף')) {
+          value = parseInt(value) * 1000;
+        }
+        await updateCustomer(phone, { home_value: value });
+        console.log(`💰 Extracted home value: ${value}`);
+      }
+    }
+    
+    // Extract name if not already known
+    if (!memory.firstName) {
+      const namePatterns = [
+        /שמי (.+)/,
+        /אני (.+)/,
+        /קוראים לי (.+)/
+      ];
+      
+      for (const pattern of namePatterns) {
+        const match = msg.match(pattern);
+        if (match && match[1]) {
+          const name = match[1].trim().split(' ')[0]; // First name only
+          await updateCustomer(phone, { first_name: name });
+          console.log(`👤 Extracted name: ${name}`);
+          break;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[extractAndSaveInfo] Error:', error);
+  }
+}
+
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    const dbHealth = await checkDatabaseHealth();
+    const health = {
+      status: dbHealth.healthy ? 'healthy' : 'unhealthy',
+      timestamp: new Date().toISOString(),
+      services: {
+        database: dbHealth
+      }
+    };
+    
+    res.status(dbHealth.healthy ? 200 : 503).json(health);
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      error: error.message
+    });
+  }
+});
+
+// Initialize the app
+async function initializeApp() {
+  try {
+    // Initialize database tables
+    await initDatabase();
+    
+    // Initialize RAG chain
+    await initializeChain();
+    
+    // Set up periodic cleanup (daily at 3 AM)
+    setInterval(async () => {
+      const hour = new Date().getHours();
+      if (hour === 3) {
+        console.log('🧹 Running daily cleanup...');
+        await cleanupOldConversations(30); // Keep 30 days of history
+      }
+    }, 3600000); // Check every hour
+    
+    console.log('✅ App initialized successfully');
+  } catch (error) {
+    console.error('❌ Failed to initialize app:', error);
+    process.exit(1);
+  }
+}
+
+// Call initialization on startup
+initializeApp();
+
 // =============================
 // 1. WhatsApp Webhook Verification (GET /webhook)
 // =============================
@@ -394,30 +573,49 @@ app.post('/simulate', async (req, res) => {
 // 2. WhatsApp Message Handler (POST /webhook)
 // =============================
 app.post("/webhook", async (req, res) => {
+  console.info('[Webhook] Received:', JSON.stringify(req.body, null, 2));
+  
   try {
     const { object, entry } = req.body;
-
+    
     if (object === "whatsapp_business_account") {
-      for (const ent of entry) {
-        for (const change of ent.changes) {
-          if (change.value.messages) {
-            for (const message of change.value.messages) {
-              const fromId = message.from;
-              const text = req.body?.text || "";
-              
-              // Process the message
-              await processMessage(text, fromId);
+      // Meta WhatsApp webhook
+      for (const e of entry || []) {
+        for (const change of e.changes || []) {
+          if (change.field === "messages") {
+            for (const msg of change.value.messages || []) {
+              if (msg.type === "text") {
+                const phone = msg.from;
+                const text = msg.text.body;
+                const messageId = msg.id;
+                
+                // Queue message with MessageId for duplicate detection
+                await messageQueue.add(async () => {
+                  await handleMessage(phone, text, messageId);
+                });
+              }
             }
           }
         }
       }
-      res.status(200).send("OK");
     } else {
-      res.sendStatus(404);
+      // Twilio webhook
+      const { Body, From, MessageSid } = req.body;
+      
+      if (Body && From) {
+        const phoneNumber = From.replace('whatsapp:', '');
+        
+        // Queue message with MessageSid for duplicate detection
+        await messageQueue.add(async () => {
+          await handleMessage(phoneNumber, Body, MessageSid);
+        });
+      }
     }
+    
+    res.status(200).send('OK');
   } catch (error) {
-    console.error("Error in webhook:", error);
-    res.sendStatus(500);
+    console.error('[Webhook] Error:', error);
+    res.status(500).send('Internal server error');
   }
 });
 
@@ -488,13 +686,34 @@ app.post('/twilio/webhook', async (req, res) => {
   }
 });
 
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('📴 SIGTERM received, shutting down gracefully...');
+  
+  // Close message queue
+  messageQueue.pause();
+  await messageQueue.onEmpty();
+  
+  // Close server
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+  
+  // Force exit after 30 seconds
+  setTimeout(() => {
+    console.error('❌ Forced shutdown after timeout');
+    process.exit(1);
+  }, 30000);
+});
+
 // =============================
 // Bootstrap & Server Start
 // =============================
 const PORT = process.env.PORT || 3000;
 
-await initializeChain();     // creates table if missing
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Server listening on port ${PORT}`);
+  console.log(`📍 Webhook URL: ${process.env.BASE_URL || `http://localhost:${PORT}`}/webhook`);
+  console.log(`💚 Health check: ${process.env.BASE_URL || `http://localhost:${PORT}`}/health`);
 });

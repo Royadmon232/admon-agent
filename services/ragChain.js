@@ -94,13 +94,32 @@ export async function initializeChain() {
       }
     );
 
-    // Create modern prompt template
+    // Create modern prompt template with anti-hallucination
     const chatPrompt = ChatPromptTemplate.fromTemplate(`
-אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. דבר בעברית בגוף ראשון.
-הקשר: {context}
+אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי. דבר בעברית בגוף ראשון.
+
+הנחיות לטון ושפה:
+- פנה ללקוח בשמו הפרטי כשידוע ("{{name}}, אשמח להסביר...")
+- השתמש בלשון חמה, אישית ומזמינה תוך שמירה על מקצועיות
+- הפגן אמפתיה ודאגה כנה ("אני מבין את החששות שלך, זה טבעי...")
+- השתמש בביטויים מעודדים וחיוביים
+- פנה ללקוח בגוף שני נוכח (את/ה)
+- אל תציג את עצמך כבוט או AI - אתה סוכן ביטוח אמיתי
+
+הנחיות חשובות:
+- השתמש אך ורק במידע המופיע בהקשר למטה
+- אל תמציא או תנחש נתונים שאינם מופיעים במפורש
+- אם אין מספיק מידע, אמור "אבדוק את הנושא ואחזור אליך"
+- אל תענה על שאלות שאינן קשורות לביטוח דירה
+
+הקשר (מידע מהמאגר):
+{context}
+
 שאלה: {input}
 
-תן תשובה מקצועית, ידידותית ומקיפה בעברית. התייחס לשאלה וכולל את כל המידע הרלוונטי.
+תן תשובה מקצועית, ידידותית ומקיפה בעברית המבוססת על המידע בהקשר בלבד.
+אם המידע בהקשר לא מספיק, אמור זאת בצורה מקצועית.
+בסוף התשובה, אם מתאים, הוסף קריאה לפעולה חמה ומזמינה.
 `);
 
     // Create document chain
@@ -290,7 +309,25 @@ export async function smartAnswer(question, context = []) {
   // Check for greetings first - only if this is the first message
   if (context.length === 0 && /^(היי|שלום|צהריים|ערב טוב)/i.test(question.trim())) {
     console.debug('[RAG] Detected greeting - returning standard response');
-    return "שלום! אני דוני, סוכן ביטוח דירות. איך אוכל לעזור?";
+    return "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך �� איך אוכל לעזור?";
+  }
+
+  // Check if question is out of scope
+  const insuranceKeywords = ['ביטוח', 'פוליסה', 'כיסוי', 'דירה', 'נזק', 'תביעה', 'פרמיה', 'השתתפות'];
+  const hasInsuranceContext = insuranceKeywords.some(keyword => question.includes(keyword));
+  
+  if (!hasInsuranceContext && context.length === 0) {
+    // Check with RAG first, but with stricter threshold
+    const testResults = await vectorStore.similaritySearchWithScore(
+      normalize(question),
+      3,
+      { scoreThreshold: 0.85 } // Very high threshold for out-of-scope detection
+    );
+    
+    if (testResults.length === 0) {
+      console.info('[RAG] Out-of-scope question detected');
+      return "אני מתמחה בנושא ביטוח דירות בלבד. אשמח לענות על כל שאלה בתחום זה 😊";
+    }
   }
 
   try {
@@ -299,7 +336,7 @@ export async function smartAnswer(question, context = []) {
     
     // Check if this is a follow-up question using GPT-4o
     const contextCheckPrompt = `
-אתה דוני, סוכן ביטוח דירות וירטואלי.
+אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי.
 השתמש בהיסטוריית השיחה הבאה כדי לקבוע אם השאלה הנוכחית היא המשך לשיחה קודמת.
 אם המשתמש שואל שאלת המשך (למשל "תסביר שוב"), ענה בהתבסס על ההקשר הקודם.
 אם המשתמש שואל משהו חדש, התעלם מהקשר והפעל חיפוש וקטורי כרגיל.
@@ -307,8 +344,10 @@ export async function smartAnswer(question, context = []) {
 חשוב:
 - אל תחזור על מידע שכבר נאמר בשיחה
 - אל תציג את עצמך שוב אם כבר הצגת את עצמך
-- השתמש בשפה טבעית ומקצועית
+- השתמש בשפה טבעית, חמה ומקצועית
 - דבר בגוף ראשון
+- פנה ללקוח בשמו אם ידוע
+- הפגן אמפתיה ודאגה
 - הימנע מלומר שאתה בוט או AI
 
 היסטוריית השיחה:
@@ -352,37 +391,53 @@ ${conversationHistory}
     for (const q of questions) {
       try {
         const query = normalize(q);
-        // First attempt with higher threshold
+        // First attempt with higher threshold (was 0.70, now 0.75)
         let results = await withTimeout(
           vectorStore.similaritySearchWithScore(
             normalize(q),
             15,
-            { scoreThreshold: 0.70 }
+            { scoreThreshold: 0.75 }
           ),
           5000
         );
         
-        // If no results or low scores, try second attempt with lower threshold
-        if (results.length === 0 || results[0][1] > 0.3) {
+        // If no results or low scores, try second attempt with lower threshold (was 0.60, now 0.65)
+        if (results.length === 0 || results[0][1] > 0.25) {
           console.debug('[RAG] First attempt failed, trying with lower threshold...');
           results = await withTimeout(
             vectorStore.similaritySearchWithScore(
               normalize(q),
               15,
-              { scoreThreshold: 0.60 }
+              { scoreThreshold: 0.65 }
             ),
             5000
           );
         }
         
+        // If still no results, mark as no match
+        if (results.length === 0) {
+          console.info('[RAG] No matches found even with lower threshold');
+          continue;
+        }
+        
         // Log raw scores for debugging
         console.debug(`[RAG] Raw scores for "${q}":`, results.map(([doc, score]) => score.toFixed(4)));
         
+        // Clean and filter answers
         const answers = results
           .map(([doc, score]) => {
             const content = doc.pageContent || doc.content || '';
-            console.debug(`[RAG] Match found - similarity: ${(1 - score).toFixed(4)}, content: ${content.slice(0, 50)}...`);
-            return content;
+            // Remove non-informative phrases
+            const cleaned = content
+              .replace(/למידע נוסף צור קשר/g, '')
+              .replace(/לפרטים נוספים/g, '')
+              .replace(/\s{2,}/g, ' ')
+              .trim();
+            
+            if (cleaned.length < 20) return null; // Too short to be useful
+            
+            console.debug(`[RAG] Match found - similarity: ${(1 - score).toFixed(4)}, content: ${cleaned.slice(0, 50)}...`);
+            return cleaned;
           })
           .filter(answer => answer && answer.trim().length > 0);
         
@@ -390,7 +445,7 @@ ${conversationHistory}
           foundAnswers = true;
           console.debug(`[RAG] Found ${answers.length} matches for question: ${q}`);
         } else {
-          console.debug(`[RAG] No matches found for question: ${q}`);
+          console.debug(`[RAG] No useful matches found for question: ${q}`);
         }
         
         answerGroups.push({
@@ -406,30 +461,39 @@ ${conversationHistory}
       }
     }
 
-    // If no answers found, let GPT-4o answer directly
+    // If no answers found, let GPT-4o answer with strict instructions
     if (!foundAnswers) {
-      console.info('[RAG] No matches found, letting GPT-4o answer directly...');
+      console.info('[RAG] No matches found, using GPT-4o with strict instructions...');
       
       const gptPrompt = `
-אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. אתה מדבר בעברית בגוף ראשון ומשתמש בסגנון שיווקי-ייעוצי.
+אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי. אתה מדבר בעברית בגוף ראשון ומשתמש בסגנון שיווקי-ייעוצי חם ואישי.
 
-${context.length === 0 ? 'התחל את התשובה במילים: "שלום! אני דוני, סוכן ביטוח דירות..."' : 'המשך את השיחה באופן טבעי, בלי להציג את עצמך שוב.'}
+${context.length === 0 ? 'התחל את התשובה במילים: "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך 😊"' : 'המשך את השיחה באופן טבעי, בלי להציג את עצמך שוב.'}
 
-השתמש בסגנון שיווקי-ייעוצי:
-- הדגש את היתרונות והכיסויים האופציונליים
-- השתמש בשפה משכנעת אך מקצועית
-- הצג את עצמך כמומחה בתחום ביטוח הדירות
-- השתמש בשפה אישית ונעימה
-- הדגש את הערך והביטחון שהלקוח מקבל
+חשוב מאוד:
+- לא נמצא מידע ספציפי במאגר שלנו לגבי השאלה
+- אל תמציא נתונים או מספרים ספציפיים
+- ענה בצורה כללית בלבד על סמך הידע הבסיסי על ביטוח דירות
+- אם אינך בטוח, אמור "אצטרך לבדוק את הפרטים המדויקים"
+- הימנע ממתן מחירים, אחוזים או נתונים ספציפיים
+
+השתמש בסגנון שיווקי-ייעוצי חם:
+- הדגש את היתרונות והכיסויים תוך הפגנת אכפתיות
+- השתמש בשפה משכנעת אך נעימה ומכבדת
+- הצג את עצמך כמומחה שדואג באמת לביטחון הלקוח
+- השתמש בשפה אישית וחמה
+- הדגש את הערך והביטחון שהלקוח מקבל ("השקעה קטנה היום תחסוך לך דאגות רבות")
 - הימנע מחזרה על מידע שכבר נאמר בשיחה
 - אל תציג את עצמך כבוט או AI - אתה סוכן ביטוח אמיתי
+- השתמש באימוג'י במקומות מתאימים בלבד (😊 לחיזוק חיובי, 👍 לאישור)
+- בסוף התשובה, הוסף קריאה לפעולה אם מתאים ("האם תרצה שאכין לך הצעת מחיר מותאמת?")
 
 היסטוריית השיחה:
 ${conversationHistory}
 
 שאלה נוכחית: ${question}
 
-אנא תן תשובה מקיפה ומקצועית לשאלת הלקוח, תוך שימוש בידע הכללי שלך על ביטוח דירות.`;
+אנא תן תשובה כללית ומקצועית, ללא נתונים ספציפיים.`;
 
       const messages = [
         { role: 'system', content: gptPrompt },
@@ -446,25 +510,27 @@ ${conversationHistory}
 
     // Merge answers with GPT-4o
     const systemPromptForMerge = `
-אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי. אתה מדבר בעברית בגוף ראשון ומשתמש בסגנון שיווקי-ייעוצי.
+אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי. אתה מדבר בעברית בגוף ראשון ומשתמש בסגנון שיווקי-ייעוצי חם.
 
-${context.length === 0 ? 'התחל את התשובה במילים: "שלום! אני דוני, סוכן ביטוח דירות..."' : 'המשך את השיחה באופן טבעי, בלי להציג את עצמך שוב.'}
+${context.length === 0 ? 'התחל את התשובה במילים: "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך 😊"' : 'המשך את השיחה באופן טבעי, בלי להציג את עצמך שוב.'}
 
-השתמש בסגנון שיווקי-ייעוצי:
-- הדגש את היתרונות והכיסויים האופציונליים
-- השתמש בשפה משכנעת אך מקצועית
-- הצג את עצמך כמומחה בתחום ביטוח הדירות
-- השתמש בשפה אישית ונעימה
-- הדגש את הערך והביטחון שהלקוח מקבל
+השתמש בסגנון שיווקי-ייעוצי חם:
+- הדגש את היתרונות והכיסויים תוך הפגנת אכפתיות
+- השתמש בשפה משכנעת אך נעימה ומכבדת
+- הצג את עצמך כמומחה שדואג באמת לביטחון הלקוח
+- השתמש בשפה אישית וחמה
+- הדגש את הערך והביטחון שהלקוח מקבל ("השקעה קטנה היום תחסוך לך דאגות רבות")
 - הימנע מחזרה על מידע שכבר נאמר בשיחה
 - אל תציג את עצמך כבוט או AI - אתה סוכן ביטוח אמיתי
+- השתמש באימוג'י במקומות מתאימים בלבד (😊 לחיזוק חיובי, 👍 לאישור)
+- בסוף התשובה, הוסף קריאה לפעולה אם מתאים ("האם תרצה שאכין לך הצעת מחיר מותאמת?")
 
 היסטוריית השיחה:
 ${conversationHistory}
 
 שאלה נוכחית: ${question}
 
-נמצאו תשובות רלוונטיות במאגר. שלב אותן לתשובה מקיפה תוך שימוש בסגנון שיווקי-ייעוצי.`;
+נמצאו תשובות רלוונטיות במאגר. שלב אותן לתשובה מקיפה תוך שימוש בסגנון שיווקי-ייעוצי חם וקריאה לפעולה בסוף.`;
 
     const mergedAnswer = await withTimeout(
       mergeAnswersWithGPTWithContext(answerGroups, question, systemPromptForMerge),
