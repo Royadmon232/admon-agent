@@ -5,7 +5,6 @@ import {
   sendWhatsAppMessage,
   sendWhatsAppMessageWithButton,
   logDelivery,
-  appendExchange,
   isDuplicateMessage,
   updateCustomer,
   getMemory,
@@ -13,6 +12,7 @@ import {
   cleanupOldConversations,
   checkDatabaseHealth
 } from './services/whatsappService.js';
+import { appendExchange } from './services/memoryService.js';
 
 /*
 ============================
