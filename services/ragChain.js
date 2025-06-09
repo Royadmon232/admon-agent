@@ -8,6 +8,7 @@ import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
 import { normalize } from '../utils/normalize.js';
+import { withTimeout } from '../utils/llmTimeout.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
@@ -224,10 +225,13 @@ async function mergeAnswersWithGPT(answerGroups, originalQuestion, historyContex
   const userPrompt = `השאלה המקורית של הלקוח: ${originalQuestion}\n\nמידע שנמצא במאגר:\n${contextBlock}\n\n${historyContext}\n\nאנא תן תשובה מקיפה ומקצועית לשאלת הלקוח.`;
 
   try {
-    const response = await llm.invoke([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ]);
+    const response = await withTimeout(
+      llm.invoke([
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ]),
+      20000
+    );
     
     return response.content.trim();
   } catch (error) {
@@ -320,10 +324,15 @@ ${conversationHistory}
       // Follow-up detected - answer directly using context only
       console.info('[RAG] Follow-up question detected, using context only');
       
-      const response = await llm.invoke([
+      const messages = [
         { role: 'system', content: contextCheckPrompt },
         { role: 'user', content: 'ענה על השאלה הנוכחית בהתבסס על ההיסטוריה. תן תשובה מקיפה בעברית.' }
-      ]);
+      ].filter(m => m && typeof m === 'object' && m.content);
+
+      const response = await withTimeout(
+        llm.invoke(messages),
+        20000
+      );
       
       console.debug('[RAG] Generated follow-up response');
       return response.content.trim();
@@ -344,32 +353,26 @@ ${conversationHistory}
       try {
         const query = normalize(q);
         // First attempt with higher threshold
-        let results = await Promise.race([
+        let results = await withTimeout(
           vectorStore.similaritySearchWithScore(
             normalize(q),
             15,
             { scoreThreshold: 0.70 }
           ),
-          setTimeout(5000).then(() => {
-            console.warn(`[RAG] Timeout for question: ${q}`);
-            return [];
-          })
-        ]);
+          5000
+        );
         
         // If no results or low scores, try second attempt with lower threshold
         if (results.length === 0 || results[0][1] > 0.3) {
           console.debug('[RAG] First attempt failed, trying with lower threshold...');
-          results = await Promise.race([
+          results = await withTimeout(
             vectorStore.similaritySearchWithScore(
               normalize(q),
               15,
               { scoreThreshold: 0.60 }
             ),
-            setTimeout(5000).then(() => {
-              console.warn(`[RAG] Timeout for second attempt on question: ${q}`);
-              return [];
-            })
-          ]);
+            5000
+          );
         }
         
         // Log raw scores for debugging
@@ -428,16 +431,15 @@ ${conversationHistory}
 
 אנא תן תשובה מקיפה ומקצועית לשאלת הלקוח, תוך שימוש בידע הכללי שלך על ביטוח דירות.`;
 
-      const response = await Promise.race([
-        llm.invoke([
-          { role: 'system', content: gptPrompt },
-          { role: 'user', content: 'ענה על השאלה בצורה מקצועית ומקיפה.' }
-        ]),
-        setTimeout(20000).then(() => {
-          console.warn('[RAG] GPT timeout - falling back to simple response');
-          return { content: 'מצטער, לא הצלחתי לענות על השאלה כרגע. אשמח לעזור לך עם שאלות ספציפיות על ביטוח דירה.' };
-        })
-      ]);
+      const messages = [
+        { role: 'system', content: gptPrompt },
+        { role: 'user', content: 'ענה על השאלה בצורה מקצועית ומקיפה.' }
+      ].filter(m => m && typeof m === 'object' && m.content);
+
+      const response = await withTimeout(
+        llm.invoke(messages),
+        20000
+      );
       
       return response.content.trim();
     }
@@ -464,13 +466,10 @@ ${conversationHistory}
 
 נמצאו תשובות רלוונטיות במאגר. שלב אותן לתשובה מקיפה תוך שימוש בסגנון שיווקי-ייעוצי.`;
 
-    const mergedAnswer = await Promise.race([
+    const mergedAnswer = await withTimeout(
       mergeAnswersWithGPTWithContext(answerGroups, question, systemPromptForMerge),
-      setTimeout(20000).then(() => {
-        console.warn('[RAG] Merge timeout - falling back to simple response');
-        return 'מצטער, לא הצלחתי לענות על השאלה כרגע. אשמח לעזור לך עם שאלות ספציפיות על ביטוח דירה.';
-      })
-    ]);
+      20000
+    );
     
     console.info('[RAG] Smart answer generated');
     console.debug('[RAG] Response path:', foundAnswers ? 'langchain' : 'fallback');
@@ -508,11 +507,16 @@ async function mergeAnswersWithGPTWithContext(answerGroups, originalQuestion, sy
     ? `השאלה המקורית של הלקוח: ${originalQuestion}\n\nמידע שנמצא במאגר:\n${contextBlock}\n\nאנא תן תשובה מקיפה ומקצועית לשאלת הלקוח.`
     : `השאלה המקורית של הלקוח: ${originalQuestion}\n\nלא נמצא מידע ספציפי במאגר שלנו. אנא ענה מהידע הכללי שלך בצורה מקצועית ומקיפה.`;
 
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt }
+  ].filter(m => m && typeof m === 'object' && m.content);
+
   try {
-    const response = await llm.invoke([
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ]);
+    const response = await withTimeout(
+      llm.invoke(messages),
+      20000
+    );
     return response.content.trim();
   } catch (error) {
     console.error('[LangChain] Error merging answers with GPT:', error);

@@ -112,6 +112,9 @@ function similarity(str1, str2) {
   return intersection.size / union.size;
 }
 
+// Lower default minimum score
+const DEFAULT_MIN_SCORE = 0.70;
+
 /**
  * Look up relevant Q&A pairs from the database
  * @param {string} userQuestion - User's question
@@ -120,7 +123,7 @@ function similarity(str1, str2) {
  * @param {object} memory - User memory object
  * @returns {Promise<Array>} Array of relevant Q&A pairs
  */
-export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.65, memory = {}) {
+export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = DEFAULT_MIN_SCORE, memory = {}) {
   const context = buildContext(memory);
   console.info("[Context built]:", context);
   
@@ -169,6 +172,47 @@ export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = 0.65,
     }
     console.error('[RAG] Error during lookup:', err);
     throw err;
+  }
+}
+
+export async function searchSimilarChunks(query, options = {}) {
+  const {
+    minScore = DEFAULT_MIN_SCORE,
+    limit = 5,
+    tableName = 'insurance_kb',
+    embeddingColumn = 'embedding',
+    contentColumn = 'content'
+  } = options;
+
+  try {
+    // First attempt with specified minScore
+    const rows = await searchWithScore(query, {
+      tableName,
+      embeddingColumn,
+      contentColumn,
+      limit: limit * 2 // Get more results for filtering
+    });
+
+    // Filter by score
+    let filteredRows = rows.filter(row => row.score >= minScore);
+
+    // If no results, retry with lower threshold
+    if (filteredRows.length === 0) {
+      console.log('[RAG] second-pass search with lower threshold');
+      const retryRows = await searchWithScore(query, {
+        tableName,
+        embeddingColumn,
+        contentColumn,
+        limit: limit * 2
+      });
+      filteredRows = retryRows.filter(row => row.score >= 0.60);
+    }
+
+    // Return top N results
+    return filteredRows.slice(0, limit);
+  } catch (error) {
+    console.error('[VectorSearch] Error in searchSimilarChunks:', error);
+    throw error;
   }
 }
 // PHASE-1 END 

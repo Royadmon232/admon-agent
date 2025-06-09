@@ -8,56 +8,9 @@ import templates from "../marketing_templates.json" with { type: "json" };
 export function intentDetect(text) {
   const lowerText = text.toLowerCase();
   
-  // Greeting patterns - both Hebrew and English
-  const greetingPatterns = [
-    // Hebrew greetings
-    /^שלום$/,
-    /^היי$/,
-    /^הי$/,
-    /^שלום שלום$/,
-    /^היי היי$/,
-    /^הי הי$/,
-    /^שלום!$/,
-    /^היי!$/,
-    /^הי!$/,
-    /^שלום שלום!$/,
-    /^היי היי!$/,
-    /^הי הי!$/,
-    /^בוקר טוב$/,
-    /^צהריים טובים$/,
-    /^ערב טוב$/,
-    /^לילה טוב$/,
-    /^שלום לך$/,
-    /^היי לך$/,
-    /^הי לך$/,
-    /^שלום לך!$/,
-    /^היי לך!$/,
-    /^הי לך!$/,
-    // English greetings
-    /^hi$/,
-    /^hello$/,
-    /^hey$/,
-    /^hi!$/,
-    /^hello!$/,
-    /^hey!$/,
-    /^good morning$/,
-    /^good afternoon$/,
-    /^good evening$/,
-    /^good night$/,
-    // Mixed language greetings
-    /^שלום hi$/,
-    /^hi שלום$/,
-    /^היי hello$/,
-    /^hello היי$/,
-    /^הי hey$/,
-    /^hey הי$/
-  ];
-  
-  // Check for greetings first
-  if (greetingPatterns.some(pattern => pattern.test(lowerText))) {
-    console.debug('[IntentDetect] Greeting detected:', lowerText);
-    return 'greeting';
-  }
+  // Check for greeting first
+  const greetingRegex = /^(שלום|היי|הי|hi|hello|hey)[.!? ]*$/i;
+  if (greetingRegex.test(lowerText.trim())) return "greeting";
   
   // Lead generation patterns - interest in insurance
   const leadPatterns = [
@@ -272,6 +225,17 @@ export function buildSalesResponse(intent, memory = {}) {
     memory: memory,
     finalResponse: response
   });
+  
+  // Clean empty placeholders
+  const clean = (tpl, key, replacement = "") =>
+    tpl.replace(new RegExp(`\\\{\{${key}\\\}\}`, "g"), replacement);
+
+  response = clean(response, "name", memory?.firstName || "");
+  response = clean(response, "city", memory?.city || "");
+  response = clean(response, "home_value", memory?.homeValue || "");
+
+  // Collapse double spaces
+  response = response.replace(/\s{2,}/g, " ").trim();
   
   return response;
 } 
