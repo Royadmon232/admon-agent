@@ -3,7 +3,7 @@ import { createRetrievalChain } from 'langchain/chains/retrieval';
 import { smartAnswer } from './ragChain.js';
 import { intentDetect, buildSalesResponse } from './salesTemplates.js';
 import { sendWhatsApp } from './twilioService.js';
-import { PQueue } from 'p-queue';
+import PQueue from 'p-queue';
 import { setTimeout } from 'timers/promises';
 import pg from 'pg';
 import twilio from 'twilio';
