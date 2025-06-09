@@ -18,7 +18,23 @@ export function intentDetect(text) {
     /רוצה לבטח/,
     /איך מבטחים/,
     /מה כולל/,
-    /כמה עולה/
+    /כמה עולה/,
+    /תוכל להסביר/,
+    /אשמח לדעת/,
+    /מה היתרונות/,
+    /מה חשוב לדעת/,
+    /איזה ביטוח/,
+    /מה מומלץ/,
+    /צריך ביטוח/,
+    /מחפש ביטוח/,
+    /רוצה לדעת/,
+    /אפשר להסביר/,
+    /מה התנאים/,
+    /מה המחיר/,
+    /איך זה עובד/,
+    /מה ההבדל/,
+    /מה חשוב/,
+    /מה כדאי/
   ];
   
   // Price objection patterns
@@ -33,7 +49,21 @@ export function intentDetect(text) {
     /לא שווה/,
     /לא צריך/,
     /מיותר/,
-    /בזבוז כסף/
+    /בזבוז כסף/,
+    /חבל על הכסף/,
+    /זה לא הכרחי/,
+    /אני לא בטוח/,
+    /אולי אחר כך/,
+    /אני חושב על זה/,
+    /זול יותר/,
+    /אין לי כסף/,
+    /זה יקר מדי/,
+    /יותר מדי כסף/,
+    /לא רוצה לשלם/,
+    /זה לא משתלם/,
+    /אני אחכה/,
+    /אולי בהמשך/,
+    /אני אבדוק/
   ];
   
   // Closing/action patterns
@@ -46,7 +76,23 @@ export function intentDetect(text) {
     /מה השלב הבא/,
     /תכין לי הצעה/,
     /אני רוצה/,
-    /בואו נקבע/
+    /בואו נקבע/,
+    /מתי אפשר/,
+    /איך מתחילים/,
+    /אני מעוניין/,
+    /בואו נסגור/,
+    /אני מסכים/,
+    /בואו נדבר/,
+    /בוא נעשה/,
+    /אני רוצה להתחיל/,
+    /בוא נתקדם/,
+    /אני רוצה להמשיך/,
+    /בואו נמשיך/,
+    /אני רוצה להצטרף/,
+    /בואו נחתום/,
+    /אני רוצה לקנות/,
+    /בואו נסגור עסקה/,
+    /אני רוצה להזמין/
   ];
   
   // Check patterns in order of priority
@@ -68,7 +114,7 @@ export function intentDetect(text) {
 /**
  * Builds a sales response based on intent and user memory
  * @param {string} intent - The detected intent
- * @param {object} memory - User memory object with optional firstName
+ * @param {object} memory - User memory object with optional firstName, city, homeValue
  * @returns {string} Formatted sales response
  */
 export function buildSalesResponse(intent, memory = {}) {
@@ -95,12 +141,37 @@ export function buildSalesResponse(intent, memory = {}) {
   const randomIndex = Math.floor(Math.random() * templateArray.length);
   let response = templateArray[randomIndex];
   
-  // Replace {{name}} placeholder with firstName if available
+  // Replace placeholders with user data if available
   if (memory.firstName) {
     response = response.replace(/\{\{name\}\}/g, memory.firstName);
   } else {
     // Remove {{name}} placeholder if no firstName available
     response = response.replace(/\{\{name\}\},?\s*/g, '');
+  }
+  
+  // Add city-specific content if available
+  if (memory.city) {
+    response = response.replace(/\{\{city\}\}/g, memory.city);
+  }
+  
+  // Add home value specific content if available
+  if (memory.homeValue) {
+    const value = parseInt(memory.homeValue);
+    if (!isNaN(value)) {
+      if (value > 2000000) {
+        response = response.replace(/\{\{home_value\}\}/g, 'נכס יוקרתי');
+      } else if (value > 1000000) {
+        response = response.replace(/\{\{home_value\}\}/g, 'נכס בעל ערך');
+      } else {
+        response = response.replace(/\{\{home_value\}\}/g, 'נכס');
+      }
+    }
+  }
+  
+  // Add emoji if not present
+  if (!response.includes('📱') && !response.includes('💪') && !response.includes('🏠') && 
+      !response.includes('💰') && !response.includes('🤝') && !response.includes('⭐')) {
+    response += ' 💪';
   }
   
   return response;
