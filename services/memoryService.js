@@ -1,34 +1,13 @@
 import pg from 'pg';
 import 'dotenv/config';
 
-// Configure PostgreSQL connection pool with proper SSL and timeout settings
-const pool = new pg.Pool(
-  process.env.DATABASE_URL 
-    ? { 
-        connectionString: process.env.DATABASE_URL,
-        ssl: {
-          rejectUnauthorized: process.env.NODE_ENV === 'production',
-          ca: process.env.SSL_CA_CERT // Optional CA certificate for production
-        },
-        statement_timeout: 5000, // 5 seconds timeout for queries
-        query_timeout: 5000,     // 5 seconds timeout for queries
-        connectionTimeoutMillis: 5000 // 5 seconds timeout for connections
-      }
-    : {
-        user: process.env.PGUSER,
-        host: process.env.PGHOST,
-        database: process.env.PGDATABASE,
-        password: process.env.PGPASSWORD,
-        port: process.env.PGPORT,
-        ssl: {
-          rejectUnauthorized: process.env.NODE_ENV === 'production',
-          ca: process.env.SSL_CA_CERT // Optional CA certificate for production
-        },
-        statement_timeout: 5000,
-        query_timeout: 5000,
-        connectionTimeoutMillis: 5000
-      }
-);
+// Configure PostgreSQL connection pool with proper SSL
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 
 // Log successful connection
 pool.on('connect', () => {

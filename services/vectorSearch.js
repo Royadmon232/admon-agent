@@ -21,15 +21,11 @@ import { getEmbedding } from '../utils/embeddingUtils.js';
 import pg from 'pg';
 import 'dotenv/config';
 
-const pool = new pg.Pool({ 
+const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: process.env.NODE_ENV === 'production',
-    ca: process.env.SSL_CA_CERT // Optional CA certificate for production
-  },
-  statement_timeout: 10000, // 10 seconds timeout for queries
-  query_timeout: 10000,     // 10 seconds timeout for queries
-  connectionTimeoutMillis: 10000 // 10 seconds timeout for connections
+    rejectUnauthorized: false
+  }
 });
 
 // Log successful connection

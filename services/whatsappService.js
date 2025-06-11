@@ -78,20 +78,12 @@ function isDuplicate(message) {
   return false;
 }
 
-// Initialize PostgreSQL pool with enhanced security and timeouts
+// Initialize PostgreSQL pool with enhanced security
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: true,
-    ca: process.env.SSL_CA_CERT // Use proper CA certificate in production
-  } : {
-    rejectUnauthorized: false // Allow self-signed in development
-  },
-  max: 20, // Maximum pool size
-  idleTimeoutMillis: 30000, // Close idle clients after 30s
-  connectionTimeoutMillis: 10000, // Return error after 10s if cannot connect
-  statement_timeout: 30000, // 30s timeout for statements
-  query_timeout: 30000, // 30s timeout for queries
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 // Handle pool errors globally
