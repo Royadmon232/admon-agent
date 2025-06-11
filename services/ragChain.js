@@ -3,7 +3,7 @@ import { createStuffDocumentsChain } from 'langchain/chains/combine_documents';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { PGVectorStore } from '@langchain/community/vectorstores/pgvector';
 import { PromptTemplate, ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import { HumanMessage, AIMessage, SystemMessage } from '@langchain/core/messages';
 import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
@@ -318,11 +318,12 @@ export async function smartAnswer(question, context = []) {
     console.info('[RAG] Detected small-talk / out-of-domain question – using GPT-4o friendly fallback');
 
     const messages = [
-      {
-        role: 'system',
-        content: `אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי. דבר בעברית בגוף ראשון בטון חם, אנושי ומזמין. ענה על שאלות כלליות small-talk בצורה נעימה ומקצועית, ללא אזכור שאתה בוט או AI.`
-      },
-      { role: 'user', content: question }
+      new SystemMessage(`אתה נציג שירות מקצועי ונעים של חברת ביטוח.
+      עליך לענות בצורה ידידותית ומקצועית לשאלות כלליות.
+      אם השאלה לא קשורה לביטוח, ענה בצורה נעימה והצג את עצמך כנציג שירות.
+      שמור על טון מקצועי אך ידידותי.
+      תמיד סיים בהצעת עזרה בנושא ביטוח.`),
+      new HumanMessage(question)
     ];
 
     try {

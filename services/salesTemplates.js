@@ -193,8 +193,10 @@ export function buildSalesResponse(intent, memory = {}) {
   const chosenTemplate = chooseCTA(intent, memory);
   
   // Clean empty placeholders
-  const clean = (tpl, key, replacement = "") =>
-    tpl.replace(new RegExp(`\\\{\{${key}\\\}\}`, "g"), replacement);
+  const clean = (text, key, value) => {
+    if (!text || !value) return text || '';
+    return text.replace(`{{${key}}}`, value);
+  };
 
   let response = chosenTemplate;
   response = clean(response, "name", memory?.firstName || "");

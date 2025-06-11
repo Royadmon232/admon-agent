@@ -1,4 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
 const model = new ChatOpenAI({
   modelName: "gpt-4o",
@@ -8,21 +9,16 @@ const model = new ChatOpenAI({
 /** Returns an array of individual user questions (strings). */
 export async function splitQuestions(text) {
   try {
-    const response = await model.invoke([
-      {
-        role: "system",
-        content: `אתה מומחה לזיהוי שאלות בהודעות טקסט.
+    const messages = [
+      new SystemMessage(`אתה מומחה לזיהוי שאלות בהודעות טקסט.
         עליך לזהות אם יש יותר משאלה אחת בהודעה.
         החזר מערך של שאלות נפרדות.
         אם יש רק שאלה אחת, החזר מערך עם שאלה אחת.
-        אם אין שאלות, החזר מערך ריק.`
-      },
-      {
-        role: "user",
-        content: text
-      }
-    ]);
+        אם אין שאלות, החזר מערך ריק.`),
+      new HumanMessage(text)
+    ];
 
+    const response = await model.invoke(messages);
     const questions = response.content
       .split('\n')
       .map(q => q.trim())
