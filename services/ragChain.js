@@ -311,18 +311,27 @@ export async function smartAnswer(question, context = []) {
   // Check if question is out of scope
   const insuranceKeywords = ['ביטוח', 'פוליסה', 'כיסוי', 'דירה', 'נזק', 'תביעה', 'פרמיה', 'השתתפות'];
   const hasInsuranceContext = insuranceKeywords.some(keyword => question.includes(keyword));
-  
+
+  // If the message is clearly unrelated to insurance (small-talk, chit-chat, etc.) and there is no prior context,
+  // let GPT-4o answer naturally instead of refusing.
   if (!hasInsuranceContext && context.length === 0) {
-    // Check with RAG first, but with stricter threshold
-    const testResults = await vectorStore.similaritySearchWithScore(
-      normalize(question),
-      3,
-      { scoreThreshold: 0.85 } // Very high threshold for out-of-scope detection
-    );
-    
-    if (testResults.length === 0) {
-      console.info('[RAG] Out-of-scope question detected');
-      return "אני מתמחה בנושא ביטוח דירות בלבד. אשמח לענות על כל שאלה בתחום זה 😊";
+    console.info('[RAG] Detected small-talk / out-of-domain question – using GPT-4o friendly fallback');
+
+    const messages = [
+      {
+        role: 'system',
+        content: `אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי. דבר בעברית בגוף ראשון בטון חם, אנושי ומזמין. ענה על שאלות כלליות small-talk בצורה נעימה ומקצועית, ללא אזכור שאתה בוט או AI.`
+      },
+      { role: 'user', content: question }
+    ];
+
+    try {
+      const response = await llm.call(messages);
+      return response.content.trim();
+    } catch (err) {
+      console.error('[RAG] GPT-4o fallback error:', err);
+      // In worst-case, still provide graceful reply
+      return 'הכל מצוין, תודה על ההתעניינות! איך אוכל לעזור לך בנושא ביטוח הדירה? 😊';
     }
   }
 
