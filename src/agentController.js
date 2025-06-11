@@ -92,7 +92,13 @@ export async function handleMessage(phone, userMsg) {
     // Process each question
     for (const question of questions) {
       // Try RAG first
-      const answer = await smartAnswer(question, context);
+      let answer;
+      try {
+        answer = await smartAnswer(question, context);
+      } catch (error) {
+        console.error('[handleMessage] RAG error:', error);
+        answer = `מצטער, אני לא בטוח לגבי התשובה לשאלה זו. אשמח לבדוק ולחזור אליך עם מידע מדויק.`;
+      }
       
       if (answer) {
         answers.push(answer);
