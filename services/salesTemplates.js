@@ -1,5 +1,4 @@
 import templates from "../marketing_templates.json" with { type: "json" };
-import { intentDetect } from './intentDetect.js';
 
 // Add CTA templates
 const CTA_TEMPLATES = {
