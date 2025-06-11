@@ -46,7 +46,8 @@ const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
-  }
+  },
+  statement_timeout: 30000 // 30 seconds timeout
 });
 
 // Log successful connection
