@@ -2,6 +2,11 @@ import pg from 'pg';
 import 'dotenv/config';
 import OpenAI from 'openai';
 
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
 // Configure PostgreSQL connection pool with proper SSL
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
