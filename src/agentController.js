@@ -2,11 +2,10 @@ import fs from 'fs/promises';
 import axios from 'axios';
 import { lookupRelevantQAs } from '../services/vectorSearch.js';
 import { getHistory, appendExchange, updateCustomer, extractCustomerInfo } from "../services/memoryService.js";
-import { buildSalesResponse, intentDetect } from "../services/salesTemplates.js";
+import { buildSalesResponse, intentDetect, chooseCTA } from "../services/salesTemplates.js";
 import { smartAnswer } from "../services/ragChain.js";
 import { sendWapp } from '../services/twilioService.js';
 import { normalize } from "../utils/normalize.js";
-import { chooseCTA } from '../services/intentDetect.js';
 import { splitQuestions } from "../utils/splitQuestions.js";
 
 const EMB_MODEL = "text-embedding-3-small";
