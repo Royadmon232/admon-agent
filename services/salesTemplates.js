@@ -1,4 +1,6 @@
 import templates from "../marketing_templates.json" with { type: "json" };
+import { intentDetect } from './intentDetect.js';
+import { chooseCTA } from './intentDetect.js';
 
 // Add CTA templates
 const CTA_TEMPLATES = {
@@ -190,7 +192,7 @@ export function buildSalesResponse(intent, memory = {}) {
   }
 
   // Choose template based on memory state
-  const chosenTemplate = chooseTemplate(memory);
+  const chosenTemplate = chooseCTA(intent, memory);
   
   // Clean empty placeholders
   const clean = (tpl, key, replacement = "") =>
@@ -203,6 +205,14 @@ export function buildSalesResponse(intent, memory = {}) {
 
   // Collapse double spaces
   response = response.replace(/\s{2,}/g, " ").trim();
+
+  // Add CTA based on intent
+  if (intent === 'lead_gen' || intent === 'info_gathering' || intent === 'close') {
+    const cta = chooseCTA(intent, memory);
+    if (cta && !response.includes(cta)) {
+      response = `${response}\n\n${cta}`;
+    }
+  }
 
   return response;
 }
