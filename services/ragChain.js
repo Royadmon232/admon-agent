@@ -364,7 +364,7 @@ ${conversationHistory}
         { role: 'user', content: 'ענה על השאלה הנוכחית בהתבסס על ההיסטוריה. תן תשובה מקיפה בעברית.' }
       ].filter(m => m && typeof m === 'object' && m.content);
 
-      const response = await llm.invoke(messages);
+      const response = await llm.call(messages);
       
       console.debug('[RAG] Generated follow-up response');
       return response.content.trim();
