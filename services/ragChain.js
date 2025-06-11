@@ -8,6 +8,8 @@ import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
 import { normalize } from '../utils/normalize.js';
+import { withTimeout } from '../utils/llmTimeout.js';
+import { splitQuestions } from '../utils/splitQuestions.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
@@ -134,7 +136,7 @@ export async function initializeChain() {
         k: 8,
         searchType: 'similarity',
         searchKwargs: {
-          scoreThreshold: 0.70
+          scoreThreshold: 0.65
         }
       })
     });
@@ -173,38 +175,7 @@ export async function initializeChain() {
   }
 })();
 
-/**
- * Split questions if multiple questions are detected
- * @param {string} text - User input text
- * @returns {string[]} Array of individual questions
- */
-function splitQuestions(text) {
-  // Split by question marks, periods followed by capital letters, or common Hebrew question patterns
-  const patterns = [
-    /\?/g,
-    /\./g,
-    /\n/g,
-    /ו(?=מה|איך|כמה|מתי|איפה|למה|האם)/g // Hebrew 'and' before question words
-  ];
-  
-  let questions = [text];
-  
-  for (const pattern of patterns) {
-    const newQuestions = [];
-    for (const q of questions) {
-      const splits = q.split(pattern).map(s => s.trim()).filter(s => s.length > 5);
-      if (splits.length > 1) {
-        newQuestions.push(...splits);
-      } else {
-        newQuestions.push(q);
-      }
-    }
-    questions = newQuestions;
-  }
-  
-  // Remove duplicates and empty strings
-  return [...new Set(questions.filter(q => q && q.trim().length > 5))];
-}
+// Removed local splitQuestions function - using the GPT-4o based one from utils/splitQuestions.js
 
 /**
  * Merge answers with GPT-4o for natural, marketing-oriented Hebrew response
@@ -243,10 +214,10 @@ async function mergeAnswersWithGPT(answerGroups, originalQuestion, historyContex
   const userPrompt = `השאלה המקורית של הלקוח: ${originalQuestion}\n\nמידע שנמצא במאגר:\n${contextBlock}\n\n${historyContext}\n\nאנא תן תשובה מקיפה ומקצועית לשאלת הלקוח.`;
 
   try {
-    const response = await llm.invoke([
+    const response = await withTimeout(llm.invoke([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
-    ]);
+    ]), 20000);
     
     return response.content.trim();
   } catch (error) {
@@ -287,12 +258,88 @@ async function isFollowUpQuestion(text, history) {
 }
 
 /**
+ * Calculate text similarity using cosine similarity on word vectors
+ * @param {string} text1 - First text
+ * @param {string} text2 - Second text
+ * @returns {number} Similarity score (0-1)
+ */
+function calculateTextSimilarity(text1, text2) {
+  const words1 = normalize(text1).split(/\s+/);
+  const words2 = normalize(text2).split(/\s+/);
+  
+  // Create frequency maps
+  const freq1 = {};
+  const freq2 = {};
+  
+  words1.forEach(word => freq1[word] = (freq1[word] || 0) + 1);
+  words2.forEach(word => freq2[word] = (freq2[word] || 0) + 1);
+  
+  // Get all unique words
+  const allWords = [...new Set([...words1, ...words2])];
+  
+  // Calculate dot product and magnitudes
+  let dotProduct = 0;
+  let magnitude1 = 0;
+  let magnitude2 = 0;
+  
+  allWords.forEach(word => {
+    const f1 = freq1[word] || 0;
+    const f2 = freq2[word] || 0;
+    dotProduct += f1 * f2;
+    magnitude1 += f1 * f1;
+    magnitude2 += f2 * f2;
+  });
+  
+  magnitude1 = Math.sqrt(magnitude1);
+  magnitude2 = Math.sqrt(magnitude2);
+  
+  if (magnitude1 === 0 || magnitude2 === 0) return 0;
+  
+  return dotProduct / (magnitude1 * magnitude2);
+}
+
+/**
+ * Check if a similar question was already asked and return the previous answer
+ * @param {string} question - Current question
+ * @param {Array} history - Conversation history
+ * @param {number} similarityThreshold - Minimum similarity to consider a match (default 0.65)
+ * @returns {object|null} Previous answer if found, null otherwise
+ */
+function findSimilarPreviousQuestion(question, history, similarityThreshold = 0.65) {
+  if (!history || history.length === 0) return null;
+  
+  const normalizedQuestion = normalize(question);
+  
+  for (let i = history.length - 1; i >= 0; i--) {
+    const exchange = history[i];
+    if (exchange.user) {
+      const normalizedPrevQuestion = normalize(exchange.user);
+      const similarity = calculateTextSimilarity(normalizedQuestion, normalizedPrevQuestion);
+      
+      if (similarity >= similarityThreshold) {
+        console.info(`[RAG] Found similar previous question with similarity ${similarity.toFixed(2)}`);
+        return {
+          previousQuestion: exchange.user,
+          previousAnswer: exchange.bot,
+          similarity: similarity
+        };
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
  * Get smart answer using LangChain RAG
  * @param {string} question - User question
  * @param {Array} context - Array of conversation history objects with user/bot properties
  * @returns {Promise<string|null>} Answer or null if not available
  */
 export async function smartAnswer(question, context = []) {
+  console.info(`[smartAnswer] Starting analysis for: "${question}"`);
+  console.info(`[smartAnswer] Context has ${context.length} previous exchanges`);
+  
   if (!vectorStore) {
     console.warn('[LangChain] Vector store not initialized, skipping');
     return null;
@@ -327,7 +374,7 @@ export async function smartAnswer(question, context = []) {
     ];
 
     try {
-      const response = await llm.call(messages);
+      const response = await withTimeout(llm.call(messages), 20000);
       return response.content.trim();
     } catch (err) {
       console.error('[RAG] GPT-4o fallback error:', err);
@@ -337,6 +384,16 @@ export async function smartAnswer(question, context = []) {
   }
 
   try {
+    // First check if this exact or similar question was already asked
+    const similarPrevious = findSimilarPreviousQuestion(question, context);
+    if (similarPrevious) {
+      console.info('[RAG] Found similar previous question!');
+      console.info(`[RAG] Previous Q: "${similarPrevious.previousQuestion}"`);
+      console.info(`[RAG] Similarity: ${similarPrevious.similarity.toFixed(2)}`);
+      console.info('[RAG] Reusing previous answer');
+      return similarPrevious.previousAnswer;
+    }
+    
     // Build conversation history for prompt
     const conversationHistory = context.map(msg => `User: ${msg.user}\nBot: ${msg.bot}`).join('\n');
     
@@ -364,6 +421,7 @@ ${conversationHistory}
 
     // First, check if this is a follow-up question
     const isFollowUp = await isFollowUpQuestion(question, context);
+    console.info(`[RAG] Is follow-up question: ${isFollowUp}`);
     
     if (isFollowUp && context.length > 0) {
       // Follow-up detected - answer directly using context only
@@ -374,7 +432,7 @@ ${conversationHistory}
         { role: 'user', content: 'ענה על השאלה הנוכחית בהתבסס על ההיסטוריה. תן תשובה מקיפה בעברית.' }
       ].filter(m => m && typeof m === 'object' && m.content);
 
-      const response = await llm.call(messages);
+      const response = await withTimeout(llm.call(messages), 20000);
       
       console.debug('[RAG] Generated follow-up response');
       return response.content.trim();
@@ -394,20 +452,20 @@ ${conversationHistory}
     for (const q of questions) {
       try {
         const query = normalize(q);
-        // First attempt with higher threshold (was 0.70, now 0.75)
+        // First attempt with standard threshold
         let results = await vectorStore.similaritySearchWithScore(
           normalize(q),
           15,
-          { scoreThreshold: 0.75 }
+          { scoreThreshold: 0.65 }
         );
         
-        // If no results or low scores, try second attempt with lower threshold (was 0.60, now 0.65)
-        if (results.length === 0 || results[0][1] > 0.25) {
+        // If no results or low scores, try second attempt with lower threshold
+        if (results.length === 0 || results[0][1] > 0.35) {
           console.debug('[RAG] First attempt failed, trying with lower threshold...');
           results = await vectorStore.similaritySearchWithScore(
             normalize(q),
             15,
-            { scoreThreshold: 0.65 }
+            { scoreThreshold: 0.60 }
           );
         }
         
@@ -460,7 +518,8 @@ ${conversationHistory}
 
     // If no answers found, let GPT-4o answer with strict instructions
     if (!foundAnswers) {
-      console.info('[RAG] No matches found, using GPT-4o with strict instructions...');
+      console.info('[RAG] No matches found in knowledge base');
+      console.info('[RAG] Using GPT-4o to generate answer from general knowledge...');
       
       const gptPrompt = `
 אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי. אתה מדבר בעברית בגוף ראשון ומשתמש בסגנון שיווקי-ייעוצי חם ואישי.
@@ -497,7 +556,7 @@ ${conversationHistory}
         { role: 'user', content: 'ענה על השאלה בצורה מקצועית ומקיפה.' }
       ].filter(m => m && typeof m === 'object' && m.content);
 
-      const response = await llm.invoke(messages);
+      const response = await withTimeout(llm.invoke(messages), 20000);
       
       return response.content.trim();
     }
@@ -570,7 +629,7 @@ async function mergeAnswersWithGPTWithContext(answerGroups, originalQuestion, sy
   ].filter(m => m && typeof m === 'object' && m.content);
 
   try {
-    const response = await llm.invoke(messages);
+    const response = await withTimeout(llm.invoke(messages), 20000);
     return response.content.trim();
   } catch (error) {
     console.error('[LangChain] Error merging answers with GPT:', error);

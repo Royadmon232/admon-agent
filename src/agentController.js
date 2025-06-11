@@ -49,15 +49,18 @@ export async function handleMessage(phone, userMsg) {
     console.info("[handleMessage] New message:", { phone, msg: normalizedMsg });
     
     // Load memory and history
-    let history = await getHistory(phone);
-    if (!Array.isArray(history)) {
-      // Fallback in case getHistory returns an object or null
-      history = history?.conversationHistory || [];
-    }
-    const customer = await extractCustomerInfo(phone);
+    const memoryData = await getHistory(phone);
+    const history = memoryData.history || [];
+    const existingCustomer = memoryData.customer || {};
+    
+    // Extract new customer info from current message
+    const newCustomerInfo = await extractCustomerInfo(normalizedMsg);
+    
+    // Merge existing and new customer info
+    const customer = { ...existingCustomer, ...newCustomerInfo };
     
     // Prepare context for API
-    const context = history.slice(-10);
+    const context = history;
     
     // Detect intent
     const intent = intentDetect(normalizedMsg);
@@ -89,15 +92,20 @@ export async function handleMessage(phone, userMsg) {
     // Split questions using GPT-4o
     const questions = await splitQuestions(normalizedMsg);
     console.info("[handleMessage] Split into questions:", questions.length);
+    console.info("[handleMessage] Questions:", questions);
     
     const answers = [];
     
     // Process each question
-    for (const question of questions) {
+    for (let i = 0; i < questions.length; i++) {
+      const question = questions[i];
+      console.info(`[handleMessage] Processing question ${i + 1}/${questions.length}: "${question}"`);
+      
       // Try RAG first
       let answer;
       try {
         answer = await smartAnswer(question, context);
+        console.info(`[handleMessage] Got answer for question ${i + 1}`);
       } catch (error) {
         console.error('[handleMessage] RAG error:', error);
         answer = `מצטער, אני לא בטוח לגבי התשובה לשאלה זו. אשמח לבדוק ולחזור אליך עם מידע מדויק.`;
@@ -107,6 +115,7 @@ export async function handleMessage(phone, userMsg) {
         answers.push(answer);
       } else {
         // Fallback response if no answer
+        console.warn(`[handleMessage] No answer for question ${i + 1}, using fallback`);
         answers.push("מצטער, אני לא בטוח לגבי התשובה לשאלה זו. אשמח לבדוק ולחזור אליך עם מידע מדויק.");
       }
     }

@@ -109,7 +109,7 @@ function similarity(str1, str2) {
 }
 
 // Lower default minimum score
-const DEFAULT_MIN_SCORE = 0.70;
+const DEFAULT_MIN_SCORE = 0.65;
 
 /**
  * Look up relevant Q&A pairs from the database
