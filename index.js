@@ -417,62 +417,16 @@ async function handleLocalMessage(phone, msg, messageId = null) {
 // Extract and save customer information from messages
 async function extractAndSaveInfo(phone, msg, memory) {
   try {
-    const lowerMsg = msg.toLowerCase();
+    // Extract customer info using GPT-4o
+    const customerInfo = await extractCustomerInfo(msg);
     
-    // Extract city if mentioned
-    const cityPatterns = [
-      /גר(ה?) ב(.+)/,
-      /מ(.+) אני/,
-      /אני מ(.+)/,
-      /בעיר (.+)/
-    ];
-    
-    for (const pattern of cityPatterns) {
-      const match = msg.match(pattern);
-      if (match && match[1]) {
-        const city = match[1].trim();
-        await updateCustomer(phone, { city });
-        console.log(`📍 Extracted city: ${city}`);
-        break;
-      }
+    // Only update if we found new information
+    if (Object.keys(customerInfo).length > 0) {
+      await updateCustomer(phone, customerInfo);
+      console.log(`[memoryService] ✅ Extracted and saved customer info:`, customerInfo);
     }
-    
-    // Extract home value if mentioned
-    const valuePattern = /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:אלף|מיליון)?/;
-    if (lowerMsg.includes('שווי') || lowerMsg.includes('ערך')) {
-      const match = msg.match(valuePattern);
-      if (match) {
-        let value = match[1].replace(/,/g, '');
-        if (lowerMsg.includes('מיליון')) {
-          value = parseInt(value) * 1000000;
-        } else if (lowerMsg.includes('אלף')) {
-          value = parseInt(value) * 1000;
-        }
-        await updateCustomer(phone, { home_value: value });
-        console.log(`💰 Extracted home value: ${value}`);
-      }
-    }
-    
-    // Extract name if not already known
-    if (!memory.firstName) {
-      const namePatterns = [
-        /שמי (.+)/,
-        /אני (.+)/,
-        /קוראים לי (.+)/
-      ];
-      
-      for (const pattern of namePatterns) {
-        const match = msg.match(pattern);
-        if (match && match[1]) {
-          const name = match[1].trim().split(' ')[0]; // First name only
-          await updateCustomer(phone, { first_name: name });
-          console.log(`👤 Extracted name: ${name}`);
-          break;
-        }
-      }
-    }
-  } catch (error) {
-    console.error('[extractAndSaveInfo] Error:', error);
+  } catch (err) {
+    console.error('[memoryService] ⚠️  Failed to extract and save info:', err.message);
   }
 }
 

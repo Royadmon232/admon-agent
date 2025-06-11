@@ -1,5 +1,6 @@
 import pg from 'pg';
 import 'dotenv/config';
+import OpenAI from 'openai';
 
 // Configure PostgreSQL connection pool with proper SSL
 const pool = new pg.Pool({
@@ -143,38 +144,39 @@ export async function recall(phone) {
 }
 
 /**
- * Update or insert customer information
+ * Update customer information
  * @param {string} phone - Customer phone number
- * @param {object} fieldsObject - Object with customer fields to update
+ * @param {object} updates - Customer info updates
  * @returns {Promise<void>}
  */
-export async function updateCustomer(phone, fieldsObject) {
+export async function updateCustomer(phone, updates) {
   try {
-    const fields = Object.keys(fieldsObject);
-    const values = Object.values(fieldsObject);
-    
-    if (fields.length === 0) {
+    // Filter out undefined and null values
+    const validUpdates = Object.entries(updates)
+      .filter(([_, value]) => value !== undefined && value !== null)
+      .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {});
+
+    if (Object.keys(validUpdates).length === 0) {
+      console.log('[memoryService] ℹ️  No valid updates to apply');
       return;
     }
-    
-    // Build SET clause for UPDATE
-    const setClause = fields.map((field, index) => `${field} = $${index + 2}`).join(', ');
-    
-    // Build conflict resolution clause
-    const conflictClause = fields.map((field, index) => `${field} = EXCLUDED.${field}`).join(', ');
-    
-    const query = `
-      INSERT INTO customers (phone, ${fields.join(', ')}, last_interaction) 
-      VALUES ($1, ${fields.map((_, index) => `$${index + 2}`).join(', ')}, CURRENT_TIMESTAMP)
-      ON CONFLICT (phone) DO UPDATE 
-      SET ${conflictClause}, last_interaction = CURRENT_TIMESTAMP
-    `;
-    
-    await pool.query(query, [phone, ...values]);
-    console.log(`[memoryService] ✅ Updated customer info for ${phone}`);
+
+    const fields = Object.keys(validUpdates);
+    const values = Object.values(validUpdates);
+    const placeholders = fields.map((_, i) => `$${i + 2}`).join(', ');
+    const setClause = fields.map((field, i) => `${field} = $${i + 2}`).join(', ');
+
+    await pool.query(
+      `INSERT INTO customers (phone, ${fields.join(', ')}, last_interaction)
+       VALUES ($1, ${placeholders}, CURRENT_TIMESTAMP)
+       ON CONFLICT (phone) DO UPDATE
+       SET ${setClause}, last_interaction = CURRENT_TIMESTAMP`,
+      [phone, ...values]
+    );
+
+    console.log(`[memoryService] ✅ Updated customer info for ${phone}:`, validUpdates);
   } catch (err) {
     console.error('[memoryService] ⚠️  Failed to update customer:', err.message);
-    throw err;
   }
 }
 
@@ -271,35 +273,51 @@ export async function getHistory(phone, maxTurns = 10) {
 }
 
 /**
- * Extract customer information from a message
- * @param {string} message - User's message
- * @returns {object|null} Extracted customer info or null
+ * Extract customer information from message using GPT-4o
+ * @param {string} msg - User message
+ * @returns {Promise<object>} Extracted customer info
  */
-export function extractCustomerInfo(message) {
-  const info = {};
-  
-  // Extract name patterns
-  const namePatterns = [
-    /(?:קוראים לי|שמי|אני) ([^\s]+)/i,
-    /(?:השם שלי|השם) ([^\s]+)/i
-  ];
-  
-  for (const pattern of namePatterns) {
-    const match = message.match(pattern);
-    if (match) {
-      info.first_name = match[1];
-      break;
+export async function extractCustomerInfo(msg) {
+  try {
+    const systemPrompt = `אתה מומחה לזיהוי מידע רלוונטי על לקוחות מהודעות טקסט.
+    עליך לזהות רק את המידע הבא אם הוא קיים בהודעה:
+    - שם פרטי
+    - שם משפחה
+    - עיר
+    - ערך דירה (בשקלים)
+    
+    החזר רק את השדות שזיהית, ללא הסברים נוספים.
+    אם לא זיהית מידע מסוים, אל תכלול אותו בתשובה.
+    החזר את התשובה בפורמט JSON בלבד.`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: msg }
+      ],
+      temperature: 0.1,
+      response_format: { type: "json_object" }
+    });
+
+    const extractedInfo = JSON.parse(response.choices[0].message.content);
+    
+    // Clean and validate the extracted info
+    const cleanInfo = {};
+    if (extractedInfo.firstName) cleanInfo.firstName = extractedInfo.firstName.trim();
+    if (extractedInfo.lastName) cleanInfo.lastName = extractedInfo.lastName.trim();
+    if (extractedInfo.city) cleanInfo.city = extractedInfo.city.trim();
+    if (extractedInfo.homeValue) {
+      // Convert home value to number and remove any non-numeric characters
+      const value = parseInt(extractedInfo.homeValue.toString().replace(/[^0-9]/g, ''));
+      if (!isNaN(value)) cleanInfo.homeValue = value;
     }
+
+    return cleanInfo;
+  } catch (err) {
+    console.error('[memoryService] ⚠️  Failed to extract customer info:', err.message);
+    return {};
   }
-  
-  // Extract email pattern
-  const emailPattern = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
-  const emailMatch = message.match(emailPattern);
-  if (emailMatch) {
-    info.email = emailMatch[0];
-  }
-  
-  return Object.keys(info).length > 0 ? info : null;
 }
 
 export async function smartAnswer(question, context = []) {
