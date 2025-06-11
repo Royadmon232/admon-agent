@@ -49,7 +49,11 @@ export async function handleMessage(phone, userMsg) {
     console.info("[handleMessage] New message:", { phone, msg: normalizedMsg });
     
     // Load memory and history
-    const history = await getHistory(phone);
+    let history = await getHistory(phone);
+    if (!Array.isArray(history)) {
+      // Fallback in case getHistory returns an object or null
+      history = history?.conversationHistory || [];
+    }
     const customer = await extractCustomerInfo(phone);
     
     // Prepare context for API
