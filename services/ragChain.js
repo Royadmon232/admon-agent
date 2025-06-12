@@ -71,6 +71,43 @@ const llm = new ChatOpenAI({
 let vectorStore = null;
 let chain = null;
 
+/**
+ * Direct search in insurance_qa table to get answers
+ * @param {string} question - User question
+ * @param {number} limit - Maximum number of results
+ * @param {number} threshold - Similarity threshold (0-1)
+ * @returns {Promise<Array>} Array of {question, answer, similarity} objects
+ */
+async function searchInsuranceQA(question, limit = 10, threshold = 0.65) {
+  try {
+    // Get embedding for the question
+    const questionEmbedding = await embeddings.embedTextQuery(question);
+    
+    // Query the database directly with cosine similarity
+    const result = await pool.query(`
+      SELECT 
+        question,
+        answer,
+        1 - (embedding <=> $1::vector) as similarity
+      FROM insurance_qa
+      WHERE 1 - (embedding <=> $1::vector) > $2
+      ORDER BY embedding <=> $1::vector
+      LIMIT $3
+    `, [questionEmbedding, threshold, limit]);
+    
+    console.info(`[RAG] Direct DB search found ${result.rows.length} matches for: "${question}"`);
+    
+    return result.rows.map(row => ({
+      question: row.question,
+      answer: row.answer,
+      similarity: row.similarity
+    }));
+  } catch (error) {
+    console.error('[RAG] Error in direct DB search:', error);
+    return [];
+  }
+}
+
 // Initialize the RAG chain
 export async function initializeChain() {
   try {
@@ -339,11 +376,6 @@ function findSimilarPreviousQuestion(question, history, similarityThreshold = 0.
 export async function smartAnswer(question, context = []) {
   console.info(`[smartAnswer] Starting analysis for: "${question}"`);
   console.info(`[smartAnswer] Context has ${context.length} previous exchanges`);
-  
-  if (!vectorStore) {
-    console.warn('[LangChain] Vector store not initialized, skipping');
-    return null;
-  }
 
   console.debug('[RAG] Normalized question:', question);
   console.debug('[RAG] Using column:', kbConfig.embeddingColumnName);
@@ -441,8 +473,8 @@ ${conversationHistory}
     // Not a clear follow-up, proceed with vector search
     console.info('[RAG] Running vector search...');
     
-    // Split questions if multiple detected
-    const questions = splitQuestions(question);
+    // Correctly await the async splitQuestions helper
+    const questions = await splitQuestions(question);
     console.info(`[RAG] Processing ${questions.length} question(s)`);
 
     // Process each question with timeout protection
@@ -452,21 +484,14 @@ ${conversationHistory}
     for (const q of questions) {
       try {
         const query = normalize(q);
-        // First attempt with standard threshold
-        let results = await vectorStore.similaritySearchWithScore(
-          normalize(q),
-          15,
-          { scoreThreshold: 0.65 }
-        );
         
-        // If no results or low scores, try second attempt with lower threshold
-        if (results.length === 0 || results[0][1] > 0.35) {
+        // Use direct DB search to get answers
+        let results = await searchInsuranceQA(query, 15, 0.65);
+        
+        // If no results, try with lower threshold
+        if (results.length === 0) {
           console.debug('[RAG] First attempt failed, trying with lower threshold...');
-          results = await vectorStore.similaritySearchWithScore(
-            normalize(q),
-            15,
-            { scoreThreshold: 0.60 }
-          );
+          results = await searchInsuranceQA(query, 15, 0.60);
         }
         
         // If still no results, mark as no match
@@ -475,15 +500,16 @@ ${conversationHistory}
           continue;
         }
         
-        // Log raw scores for debugging
-        console.debug(`[RAG] Raw scores for "${q}":`, results.map(([doc, score]) => score.toFixed(4)));
+        // Log results for debugging
+        console.debug(`[RAG] Found ${results.length} matches for "${q}"`);
+        results.forEach(r => {
+          console.debug(`[RAG] Match - similarity: ${r.similarity.toFixed(4)}, Q: ${r.question.slice(0, 50)}...`);
+        });
         
-        // Clean and filter answers
+        // Extract answers
         const answers = results
-          .map(([doc, score]) => {
-            const content = doc.pageContent || doc.content || '';
-            // Remove non-informative phrases
-            const cleaned = content
+          .map(result => {
+            const cleaned = result.answer
               .replace(/למידע נוסף צור קשר/g, '')
               .replace(/לפרטים נוספים/g, '')
               .replace(/\s{2,}/g, ' ')
@@ -491,7 +517,6 @@ ${conversationHistory}
             
             if (cleaned.length < 20) return null; // Too short to be useful
             
-            console.debug(`[RAG] Match found - similarity: ${(1 - score).toFixed(4)}, content: ${cleaned.slice(0, 50)}...`);
             return cleaned;
           })
           .filter(answer => answer && answer.trim().length > 0);
