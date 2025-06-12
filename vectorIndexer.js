@@ -26,7 +26,7 @@ export async function reindexVectors() {
 
     const embeddings = new OpenAIEmbeddings({
       openAIApiKey: process.env.OPENAI_API_KEY,
-      modelName: 'text-embedding-3-small'
+      modelName: 'text-embedding-ada-002'
     });
 
     // Check if table exists

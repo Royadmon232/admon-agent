@@ -175,7 +175,7 @@ export async function searchSimilarChunks(query, options = {}) {
   const {
     minScore = DEFAULT_MIN_SCORE,
     limit = 5,
-    tableName = 'insurance_kb',
+    tableName = 'insurance_qa',
     embeddingColumn = 'embedding',
     contentColumn = 'content'
   } = options;
