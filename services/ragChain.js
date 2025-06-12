@@ -59,7 +59,7 @@ pool.on('connect', () => {
 // Initialize OpenAI components
 const embeddings = new OpenAIEmbeddings({
   openAIApiKey: process.env.OPENAI_API_KEY,
-  modelName: 'text-embedding-ada-002'
+  modelName: 'text-embedding-3-small'
 });
 
 const llm = new ChatOpenAI({
@@ -87,7 +87,7 @@ export async function initializeChain() {
         columns: {
           idColumnName: kbConfig.idColumnName ?? 'id',
           vectorColumnName: kbConfig.embeddingColumnName,
-          contentColumnName: kbConfig.contentColumnName,
+        
           metadataColumnName: null // Explicitly disable metadata
         },
         filter: {}, // Force embedding-only search with empty filter
