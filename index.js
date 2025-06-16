@@ -597,23 +597,21 @@ app.post('/twilio/webhook', async (req, res) => {
   try {
     const botResponse = await handleMessage(senderPhone, messageText);
 
-    if (!botResponse || typeof botResponse !== 'string' || botResponse.startsWith("מצטער, אירעה שגיאה")) {
-      console.error(`[Twilio] Failed to get valid response from handleMessage for: "${messageText}". Response: ${botResponse}`);
-      // Optionally, send a generic error message back to the user if handleMessage failed
-      // For now, just return 500 as the original plan was to return 500 on failure to get bot response
+    if (!botResponse || !botResponse.response || typeof botResponse.response !== 'string' || botResponse.response.startsWith("מצטער, אירעה שגיאה")) {
+      console.error(`[Twilio] Failed to get valid response from handleMessage for: "${messageText}". Response: ${JSON.stringify(botResponse)}`);
       return res.status(500).send('Failed to get bot response.');
     }
 
-    console.log(`[Twilio] Bot response for ${senderPhone}: "${botResponse.substring(0, 60)}..."`);
+    console.log(`[Twilio] Bot response for ${senderPhone}: "${botResponse.response.substring(0, 60)}..."`);
 
-    const wappResult = await sendWapp(senderPhone, botResponse);
+    const wappResult = await sendWapp(senderPhone, botResponse.response);
 
     if (wappResult.success) {
       console.log(`[Twilio] Successfully sent WhatsApp reply to ${senderPhone}. SID: ${wappResult.sid}`);
       return res.status(200).type('text/xml').send('<Response/>'); // Twilio expects XML response for success
     } else {
       console.warn(`[Twilio] Failed to send WhatsApp reply to ${senderPhone}, attempting SMS fallback. Error: ${wappResult.error}`);
-      const smsResult = await smsFallback(senderPhone, botResponse);
+      const smsResult = await smsFallback(senderPhone, botResponse.response);
       if (smsResult.success) {
         console.log(`[Twilio] Successfully sent SMS fallback to ${senderPhone}. SID: ${smsResult.sid}`);
         return res.status(200).type('text/xml').send('<Response/>');
