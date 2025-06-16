@@ -218,28 +218,29 @@ export function buildSalesResponse(intent, memory = {}) {
 }
 
 export function chooseCTA(intent, memory = {}) {
-  // Choose appropriate CTA based on intent and context
-  let ctaOptions = [];
-  
-  switch(intent) {
-    case 'lead_gen':
-      ctaOptions = CTA_TEMPLATES.PRICE_INQUIRY;
-      break;
-    case 'price_pushback':
-      // Don't add another CTA on price objection
+  try {
+    // If no intent or memory, return null
+    if (!intent || !memory) {
       return null;
-    case 'close':
-      ctaOptions = CTA_TEMPLATES.FOLLOW_UP;
-      break;
-    default:
-      // For general questions, sometimes add a soft CTA
-      if (Math.random() > 0.5) { // 50% chance
-        ctaOptions = CTA_TEMPLATES.GENERAL_INFO;
-      } else {
-        return null;
-      }
-  }
+    }
 
-  // Choose random CTA from options
-  return ctaOptions[Math.floor(Math.random() * ctaOptions.length)];
+    // Get templates for the intent
+    const templates = CTA_TEMPLATES[intent];
+    if (!templates || templates.length === 0) {
+      return null;
+    }
+
+    // Choose a random template
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    // Return null for empty templates
+    if (!template || template.trim().length === 0) {
+      return null;
+    }
+
+    return template;
+  } catch (error) {
+    console.error('[chooseCTA] Error:', error);
+    return null;
+  }
 } 

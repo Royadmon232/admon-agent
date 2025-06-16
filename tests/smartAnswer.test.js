@@ -50,4 +50,18 @@ describe('smartAnswer', () => {
     const response = await smartAnswer('test question', []);
     expect(response).toBeDefined();
   });
+
+  test('handles GPT timeout gracefully', async () => {
+    // Mock LLM to simulate timeout
+    mockLLM.invoke = jest.fn().mockRejectedValue(new Error('Timeout'));
+    
+    // Call smartAnswer with a timeout
+    const response = await smartAnswer('test question', []);
+    
+    // Should return a graceful fallback message
+    expect(response).toBeDefined();
+    expect(typeof response).toBe('string');
+    expect(response.length).toBeGreaterThan(0);
+    expect(response).toContain('מצטער');
+  });
 }); 

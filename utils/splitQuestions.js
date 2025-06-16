@@ -8,6 +8,11 @@ const model = new ChatOpenAI({
 
 /** Returns an array of individual user questions (strings). */
 export async function splitQuestions(text) {
+  if (!text) {
+    console.warn('[splitQuestions] Received empty text, returning empty array');
+    return [];
+  }
+  
   try {
     const messages = [
       new SystemMessage(`אתה מומחה לזיהוי וחילוץ שאלות מהודעות טקסט בעברית.

@@ -133,7 +133,7 @@ export async function handleMessage(phone, userMsg) {
     // Add CTA based on intent if appropriate
     if (intent === 'lead_gen' || intent === 'info_gathering' || intent === 'close') {
       const cta = chooseCTA(intent, customer);
-      if (cta && !finalResponse.includes(cta)) {
+      if (cta) {
         finalResponse = `${finalResponse}\n\n${cta}`;
       }
     }
