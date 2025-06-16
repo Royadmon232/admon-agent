@@ -9,9 +9,10 @@ import { normalize } from "../utils/normalize.js";
 import { splitQuestions } from "../utils/splitQuestions.js";
 
 const EMB_MODEL = "text-embedding-3-small";
-const SEMANTIC_THRESHOLD = 0.78;
+const SEMANTIC_THRESHOLD = 0.65;
 const PRIMARY_MODEL = 'text-embedding-3-small';
 const FALLBACK_MODEL = 'text-embedding-ada-002';
+const MAX_CONTEXT_LENGTH = 10000;
 
 // Load knowledge base once at startup
 let KNOWLEDGE = [];
@@ -59,9 +60,6 @@ export async function handleMessage(phone, userMsg) {
     // Merge existing and new customer info
     const customer = { ...existingCustomer, ...newCustomerInfo };
     
-    // Prepare context for API
-    const context = history;
-    
     // Detect intent
     const intent = intentDetect(normalizedMsg);
     console.info("[handleMessage] Detected intent:", intent);
@@ -76,7 +74,7 @@ export async function handleMessage(phone, userMsg) {
     });
     
     // Handle greeting immediately
-    if (intent === "greeting" && context.length === 0) {
+    if (intent === "greeting" && history.length === 0) {
       const greetingResponse = customer.firstName 
         ? `שלום ${customer.firstName}! אני דוני, סוכן ביטוח דירות. שמח לעזור לך 😊 איך אוכל לעזור?`
         : "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך 😊 איך אוכל לעזור?";
@@ -92,43 +90,48 @@ export async function handleMessage(phone, userMsg) {
     // Split questions using GPT-4o
     const questions = await splitQuestions(normalizedMsg);
     console.info("[handleMessage] Split into questions:", questions.length);
-    console.info("[handleMessage] Questions:", questions);
     
     const answers = [];
     
     // Process each question
-    for (let i = 0; i < questions.length; i++) {
-      const question = questions[i];
-      console.info(`[handleMessage] Processing question ${i + 1}/${questions.length}: "${question}"`);
+    for (const question of questions) {
+      console.info(`[handleMessage] Processing question: "${question}"`);
       
-      // Try RAG first
+      // Check conversation memory for related questions
+      const relatedQuestion = findSimilarPreviousQuestion(question, history, SEMANTIC_THRESHOLD);
+      
       let answer;
-      try {
-        answer = await smartAnswer(question, context);
-        console.info(`[handleMessage] Got answer for question ${i + 1}`);
-      } catch (error) {
-        console.error('[handleMessage] RAG error:', error);
-        answer = `מצטער, אני לא בטוח לגבי התשובה לשאלה זו. אשמח לבדוק ולחזור אליך עם מידע מדויק.`;
+      if (relatedQuestion) {
+        // Use contextual answer for related questions
+        console.info('[handleMessage] Found related question in history');
+        answer = await smartAnswer(question, history);
+      } else {
+        // Try vector search for new questions
+        console.info('[handleMessage] No related question found, trying vector search');
+        const relevantQAs = await lookupRelevantQAs(question, SEMANTIC_THRESHOLD);
+        
+        if (relevantQAs && relevantQAs.length > 0) {
+          // Use smartAnswer with relevant QAs
+          answer = await smartAnswer(question, history, relevantQAs);
+        } else {
+          // Fallback to direct GPT-4o answer
+          console.info('[handleMessage] No relevant QAs found, using direct GPT-4o');
+          answer = await smartAnswer(question, history);
+        }
       }
       
-      if (answer) {
-        answers.push(answer);
-      } else {
-        // Fallback response if no answer
-        console.warn(`[handleMessage] No answer for question ${i + 1}, using fallback`);
-        answers.push("מצטער, אני לא בטוח לגבי התשובה לשאלה זו. אשמח לבדוק ולחזור אליך עם מידע מדויק.");
+      // Ensure we have a valid answer
+      if (!answer) {
+        answer = "מצטער, אני לא בטוח לגבי התשובה לשאלה זו. אשמח לבדוק ולחזור אליך עם מידע מדויק.";
       }
+      
+      answers.push(answer);
     }
     
     // Build final response
-    let finalResponse;
-    
-    if (answers.length === 1) {
-      finalResponse = answers[0];
-    } else {
-      // Multiple answers - format as numbered list
-      finalResponse = answers.map((a, i) => `${i + 1}. ${a}`).join("\n\n");
-    }
+    let finalResponse = answers.length === 1 
+      ? answers[0] 
+      : answers.map((a, i) => `${i + 1}. ${a}`).join("\n\n");
     
     // Add CTA based on intent if appropriate
     if (intent === 'lead_gen' || intent === 'info_gathering' || intent === 'close') {
@@ -140,10 +143,16 @@ export async function handleMessage(phone, userMsg) {
     
     // Add sales template if appropriate
     if (intent !== 'close' && !finalResponse.includes('לחצו כאן') && !finalResponse.includes('בואו נקבע')) {
-      const salesTemplate = await buildSalesResponse(intent, { ...customer, history: context });
+      const salesTemplate = await buildSalesResponse(intent, { ...customer, history });
       if (salesTemplate && !finalResponse.includes(salesTemplate)) {
         finalResponse = `${finalResponse}\n\n${salesTemplate}`;
       }
+    }
+    
+    // Ensure response doesn't exceed context length
+    if (finalResponse.length > MAX_CONTEXT_LENGTH) {
+      console.warn('[handleMessage] Response exceeds max length, truncating');
+      finalResponse = finalResponse.substring(0, MAX_CONTEXT_LENGTH - 100) + '...';
     }
     
     // Log the response construction
@@ -165,6 +174,42 @@ export async function handleMessage(phone, userMsg) {
     const errorMsg = "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
     return errorMsg;
   }
+}
+
+// Helper function to find similar previous questions
+function findSimilarPreviousQuestion(question, history, threshold = 0.65) {
+  if (!history || history.length === 0) return null;
+  
+  // Get user messages from history
+  const userMessages = history
+    .filter(msg => msg.role === 'user')
+    .map(msg => msg.content);
+  
+  // Find most similar previous question
+  let maxSimilarity = 0;
+  let mostSimilar = null;
+  
+  for (const prevQuestion of userMessages) {
+    const similarity = calculateTextSimilarity(question, prevQuestion);
+    if (similarity > maxSimilarity && similarity >= threshold) {
+      maxSimilarity = similarity;
+      mostSimilar = prevQuestion;
+    }
+  }
+  
+  return mostSimilar;
+}
+
+// Helper function to calculate text similarity
+function calculateTextSimilarity(text1, text2) {
+  // Simple implementation - can be replaced with more sophisticated similarity
+  const words1 = new Set(text1.toLowerCase().split(/\s+/));
+  const words2 = new Set(text2.toLowerCase().split(/\s+/));
+  
+  const intersection = new Set([...words1].filter(x => words2.has(x)));
+  const union = new Set([...words1, ...words2]);
+  
+  return intersection.size / union.size;
 }
 
 // WhatsApp message sending function
