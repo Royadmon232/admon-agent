@@ -139,13 +139,13 @@ export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = DEFAU
           ROW_NUMBER() OVER (PARTITION BY metadata->>'original_question' ORDER BY 1 - (embedding <=> $1) DESC) as rn
         FROM insurance_qa 
         ORDER BY embedding <=> $1 
-        LIMIT $2 * 2
+        LIMIT $2
       )
       SELECT question, answer, metadata, score
       FROM ranked_results
       WHERE rn = 1
       ORDER BY score DESC`,
-      [JSON.stringify(emb), topK * 2]
+      [JSON.stringify(emb), topK * 2]  // topK * 2 is already an integer
     );
     
     // Filter and deduplicate results
@@ -155,9 +155,9 @@ export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = DEFAU
     console.info(`[RAG] Retrieved ${rows.length} results, filtered to ${filteredResults.length}`);
     console.info('[RAG] Top matches:', 
       filteredResults.slice(0, 3).map(r => ({ 
-        q: r.question.slice(0,40)+'…', 
-        score: r.score.toFixed(2),
-        chunk: r.metadata?.chunk_index + '/' + r.metadata?.total_chunks
+        q: r.question ? r.question.slice(0,40)+'…' : 'N/A', 
+        score: r.score ? r.score.toFixed(2) : 'N/A',
+        chunk: r.metadata ? `${r.metadata.chunk_index}/${r.metadata.total_chunks}` : 'N/A'
       }))
     );
     

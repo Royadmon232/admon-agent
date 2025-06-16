@@ -1,13 +1,14 @@
 import fs from 'fs/promises';
 import axios from 'axios';
 import { lookupRelevantQAs } from '../services/vectorSearch.js';
-import { getHistory, appendExchange, updateCustomer, extractCustomerInfo } from "../services/memoryService.js";
-import { buildSalesResponse, intentDetect, chooseCTA } from "../services/salesTemplates.js";
+import * as memoryService from "../services/memoryService.js";
+import { buildSalesResponse, chooseCTA } from "../services/salesTemplates.js";
 import { smartAnswer } from "../services/ragChain.js";
 import { sendWapp } from '../services/twilioService.js';
 import { normalize } from "../utils/normalize.js";
 import { splitQuestions } from "../utils/splitQuestions.js";
 import { safeCall } from './utils/safeCall.js';
+import { detectIntent } from "./intentDetect.js";
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.65;
@@ -45,86 +46,131 @@ export async function semanticLookup(userMsg, memory = {}) {
 }
 
 // Main message handler
-export async function handleMessage(phone, userMsg) {
+export async function handleMessage(phone, msg) {
+  console.log('[handleMessage] New message:', { phone, msg });
+  
   try {
-    const normalizedMsg = normalize(userMsg);
-    console.info("[handleMessage] New message:", { phone, msg: normalizedMsg });
+    // Detect intent
+    const intent = await detectIntent(msg);
+    console.log('[handleMessage] Detected intent:', intent);
+    
+    // Update customer stage
+    await memoryService.updateCustomer(phone, { stage: 'engaged' });
+    
+    // Split into questions
+    const questions = await splitQuestions(msg);
+    console.log('[handleMessage] Split into questions:', questions.length);
     
     // Load memory and history
-    const memoryData = await getHistory(phone);
+    const memoryData = await memoryService.getHistory(phone);
     const history = memoryData.history || [];
     const existingCustomer = memoryData.customer || {};
     
     // Extract new customer info from current message
-    const newCustomerInfo = await extractCustomerInfo(normalizedMsg);
+    const newCustomerInfo = await memoryService.extractCustomerInfo(msg);
     
     // Merge existing and new customer info
     const customer = { ...existingCustomer, ...newCustomerInfo };
     
-    // Detect intent
-    const intent = intentDetect(normalizedMsg);
-    console.info("[handleMessage] Detected intent:", intent);
-    
-    // Extract and save customer info if available
-    await updateCustomer(phone, {
-      city: customer.city,
-      first_name: customer.firstName,
-      last_name: customer.lastName,
-      home_value: customer.homeValue,
-      stage: customer.stage || 'engaged'
-    });
-    
-    // Handle greeting immediately
-    if (intent === "greeting") {
-      const greetingResponse = buildSalesResponse("greeting", customer);
+    // If no questions found, use GPT-4o for general response
+    if (questions.length === 0) {
+      console.info("[handleMessage] No questions found, using GPT-4o for general response");
+      const generalPrompt = `You are a friendly insurance agent named Dony. The user sent this message: "${msg}"
+      Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
+      If it's a question about insurance, explain that you're here to help with insurance-related questions.
+      Keep the response concise and engaging.`;
       
-      await appendExchange(phone, normalizedMsg, greetingResponse, {
-        intent: "greeting",
+      const answer = await safeCall(
+        () => smartAnswer(generalPrompt, []),
+        { fallback: () => 'מצטער, אני בודק וחוזר אליך מיד.' }
+      );
+      
+      // Append exchange to conversation history
+      await memoryService.appendExchange(phone, msg, answer, {
+        intent,
         timestamp: new Date().toISOString()
       });
       
-      return greetingResponse;
+      return {
+        response: answer,
+        intent
+      };
     }
     
-    // Split questions using GPT-4o
-    const questions = await splitQuestions(normalizedMsg);
-    console.info("[handleMessage] Split into questions:", questions.length);
-    
-    const answers = [];
-    
     // Process each question
+    const answers = [];
     for (const question of questions) {
       console.info(`[handleMessage] Processing question: "${question}"`);
       let answer = null;
-      // 1. Try contextual answer (history) via GPT-4o
-      answer = await safeCall(
-        () => smartAnswer(question, history),
-        { fallback: () => null }
+      
+      // Check if question is related to history
+      const isRelatedToHistory = await safeCall(
+        async () => {
+          if (history.length === 0) return false;
+          
+          const checkPrompt = `Based on the conversation history below, determine if the current question is related to or continues from the previous conversation.
+          
+Conversation History:
+${history.map(h => `User: ${h.user}\nBot: ${h.bot}`).join('\n\n')}
+
+Current Question: ${question}
+
+Answer with only "true" if related to previous conversation, or "false" if it's a completely new topic.`;
+          
+          const response = await smartAnswer(checkPrompt, []);
+          return response && response.toLowerCase().includes('true');
+        },
+        { fallback: () => false }
       );
-      // 2. If null, try RAG (vector search)
-      if (answer == null) {
+      
+      console.info(`[handleMessage] Question related to history: ${isRelatedToHistory}`);
+      
+      if (isRelatedToHistory) {
+        // Generate response based on conversation context
+        answer = await safeCall(
+          () => smartAnswer(question, history),
+          { fallback: () => null }
+        );
+        console.info("[handleMessage] Generated answer from conversation context");
+      }
+      
+      // Try RAG vector search
+      if (!answer) {
         const relevantQAs = await safeCall(
-          () => lookupRelevantQAs(question, SEMANTIC_THRESHOLD),
+          () => lookupRelevantQAs(question, 8, SEMANTIC_THRESHOLD),
           { fallback: () => [] }
         );
+        
         if (relevantQAs && relevantQAs.length > 0) {
+          console.info(`[handleMessage] Found ${relevantQAs.length} relevant QAs from vector search`);
           answer = await safeCall(
             () => smartAnswer(question, history, relevantQAs),
             { fallback: () => null }
           );
+        } else {
+          console.info("[handleMessage] No matches from RAG vector search");
         }
       }
-      // 3. If still null, try direct GPT-4o answer (no context)
-      if (answer == null) {
+      
+      // If still no answer, use GPT-4o for general response
+      if (!answer) {
+        console.info("[handleMessage] Using GPT-4o for general response");
+        const generalPrompt = `You are a friendly insurance agent named Dony. The user sent this message: "${question}"
+        Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
+        If it's a question about insurance, explain that you're here to help with insurance-related questions.
+        Keep the response concise and engaging.`;
+        
         answer = await safeCall(
-          () => smartAnswer(question, []),
+          () => smartAnswer(generalPrompt, []),
           { fallback: () => 'מצטער, אני בודק וחוזר אליך מיד.' }
         );
       }
-      // 4. If GPT fails, use safe default
+      
+      // Final fallback
       if (!answer) {
         answer = 'מצטער, אני בודק וחוזר אליך מיד.';
       }
+      
       answers.push(answer);
     }
     
@@ -149,30 +195,23 @@ export async function handleMessage(phone, userMsg) {
       }
     }
     
-    // Ensure response doesn't exceed context length
-    if (finalResponse.length > MAX_CONTEXT_LENGTH) {
-      console.warn('[handleMessage] Response exceeds max length, truncating');
-      finalResponse = finalResponse.substring(0, MAX_CONTEXT_LENGTH - 100) + '...';
-    }
-    
-    // Log the response construction
-    console.info("[Response Construction]:", {
-      intent,
-      questionsCount: questions.length,
-      responseLength: finalResponse.length
-    });
-    
     // Append exchange to conversation history
-    await appendExchange(phone, normalizedMsg, finalResponse, {
+    await memoryService.appendExchange(phone, msg, finalResponse, {
       intent,
       timestamp: new Date().toISOString()
     });
     
-    return finalResponse;
+    return {
+      response: finalResponse,
+      intent
+    };
+    
   } catch (error) {
-    console.error("Error handling message:", error);
-    const errorMsg = "מצטער, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה שוב מאוחר יותר.";
-    return errorMsg;
+    console.error('[handleMessage] Error:', error);
+    return {
+      response: 'מצטער/ת, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה/י שוב או פנה/י אלינו בדרך אחרת.',
+      intent: 'error'
+    };
   }
 }
 
@@ -253,7 +292,7 @@ export async function sendWhatsAppMessageWithButton(to, message, buttonTitle, bu
 export async function processMessage(text, memory = {}) {
   try {
     // Detect intent first
-    const intent = intentDetect(text);
+    const intent = detectIntent(text);
     memory.intent = intent;
 
     // Handle greeting intent immediately

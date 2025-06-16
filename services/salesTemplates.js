@@ -134,7 +134,12 @@ export function intentDetect(text) {
     /חבל על הזמן/
   ];
   
-  if (frustrationPatterns.some(pattern => pattern.test(lowerText))) {
+  // Check if the text contains insurance-related keywords
+  const insuranceKeywords = ['ביטוח', 'פוליסה', 'כיסוי', 'דירה', 'נזק', 'תביעה', 'פרמיה', 'השתתפות'];
+  const hasInsuranceContext = insuranceKeywords.some(keyword => lowerText.includes(keyword));
+  
+  // Don't classify as frustration if it's an insurance question
+  if (frustrationPatterns.some(pattern => pattern.test(lowerText)) && !hasInsuranceContext) {
     console.debug('[IntentDetect] Frustration detected:', lowerText);
     return 'frustration';
   }
