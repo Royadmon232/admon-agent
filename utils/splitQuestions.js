@@ -1,5 +1,6 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { safeCall } from "../src/utils/safeCall.js";
 
 const model = new ChatOpenAI({
   modelName: "gpt-4o",
@@ -37,7 +38,10 @@ export async function splitQuestions(text) {
       new HumanMessage(text)
     ];
 
-    const response = await model.invoke(messages);
+    const response = await safeCall(
+      () => model.invoke(messages),
+      { fallback: () => ({ content: JSON.stringify([text]) }) }
+    );
     
     // Try to parse as JSON first
     try {

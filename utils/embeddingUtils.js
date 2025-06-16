@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import OpenAI from 'openai';
+import { safeCall } from '../src/utils/safeCall.js';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -19,10 +20,10 @@ export async function getEmbedding(text) {
   }
 
   try {
-    const response = await openai.embeddings.create({
+    const response = await safeCall(() => openai.embeddings.create({
       model: EMBEDDING_MODEL,
       input: text.trim(), // OpenAI recommends trimming whitespace
-    });
+    }), { fallback: () => ({ data: [{ embedding: [] }] }) });
 
     if (response && response.data && response.data[0] && response.data[0].embedding) {
       return response.data[0].embedding;

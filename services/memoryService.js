@@ -1,6 +1,7 @@
 import pg from 'pg';
 import 'dotenv/config';
 import OpenAI from 'openai';
+import { safeCall } from '../src/utils/safeCall.js';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -295,7 +296,7 @@ export async function extractCustomerInfo(msg) {
     אם לא זיהית מידע מסוים, אל תכלול אותו בתשובה.
     החזר את התשובה בפורמט JSON בלבד.`;
 
-    const response = await openai.chat.completions.create({
+    const response = await safeCall(() => openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         { role: "system", content: systemPrompt },
@@ -303,7 +304,7 @@ export async function extractCustomerInfo(msg) {
       ],
       temperature: 0.1,
       response_format: { type: "json_object" }
-    });
+    }), { fallback: () => ({ choices: [{ message: { content: '{}' } }] }) });
 
     const extractedInfo = JSON.parse(response.choices[0].message.content);
     

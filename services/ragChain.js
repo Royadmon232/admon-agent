@@ -12,6 +12,7 @@ import { splitQuestions } from '../utils/splitQuestions.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
+import { safeCall } from '../src/utils/safeCall.js';
 
 // Load sales templates
 const __filename = fileURLToPath(import.meta.url);
@@ -80,7 +81,7 @@ let chain = null;
 async function searchInsuranceQA(question, limit = 10, threshold = 0.65) {
   try {
     // Get embedding for the question
-    const questionEmbedding = await embeddings.embedQuery(question);
+    const questionEmbedding = await safeCall(() => embeddings.embedQuery(question), { fallback: () => [] });
     
     // Query the database directly with cosine similarity
     const result = await pool.query(`
@@ -250,10 +251,10 @@ async function mergeAnswersWithGPT(answerGroups, originalQuestion, historyContex
   const userPrompt = `השאלה המקורית של הלקוח: ${originalQuestion}\n\nמידע שנמצא במאגר:\n${contextBlock}\n\n${historyContext}\n\nאנא תן תשובה מקיפה ומקצועית לשאלת הלקוח.`;
 
   try {
-    const response = await llm.invoke([
+    const response = await safeCall(() => llm.invoke([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
-    ]);
+    ]), { fallback: () => ({ content: 'מצטער, אני בודק וחוזר אליך מיד.' }) });
     
     return response.content.trim();
   } catch (error) {
@@ -405,7 +406,7 @@ export async function smartAnswer(question, context = []) {
     ];
 
     try {
-      const response = await llm.call(messages);
+      const response = await safeCall(() => llm.call(messages), { fallback: () => ({ content: 'מצטער, אני בודק וחוזר אליך מיד.' }) });
       return response.content.trim();
     } catch (err) {
       console.error('[RAG] GPT-4o fallback error:', err);
@@ -463,7 +464,7 @@ ${conversationHistory}
         { role: 'user', content: 'ענה על השאלה הנוכחית בהתבסס על ההיסטוריה. תן תשובה מקיפה בעברית.' }
       ].filter(m => m && typeof m === 'object' && m.content);
 
-      const response = await llm.call(messages);
+      const response = await safeCall(() => llm.call(messages), { fallback: () => ({ content: 'מצטער, אני בודק וחוזר אליך מיד.' }) });
       
       console.debug('[RAG] Generated follow-up response');
       return response.content.trim();
@@ -580,7 +581,7 @@ ${conversationHistory}
         { role: 'user', content: 'ענה על השאלה בצורה מקצועית ומקיפה.' }
       ].filter(m => m && typeof m === 'object' && m.content);
 
-      const response = await llm.invoke(messages);
+      const response = await safeCall(() => llm.invoke(messages), { fallback: () => ({ content: 'מצטער, אני בודק וחוזר אליך מיד.' }) });
       
       return response.content.trim();
     }
@@ -653,7 +654,7 @@ async function mergeAnswersWithGPTWithContext(answerGroups, originalQuestion, sy
   ].filter(m => m && typeof m === 'object' && m.content);
 
   try {
-    const response = await llm.invoke(messages);
+    const response = await safeCall(() => llm.invoke(messages), { fallback: () => ({ content: 'מצטער, אני בודק וחוזר אליך מיד.' }) });
     return response.content.trim();
   } catch (error) {
     console.error('[LangChain] Error merging answers with GPT:', error);

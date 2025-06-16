@@ -20,6 +20,7 @@ import { normalize } from '../utils/normalize.js';
 import { getEmbedding } from '../utils/embeddingUtils.js';
 import pg from 'pg';
 import 'dotenv/config';
+import { safeCall } from '../src/utils/safeCall.js';
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
@@ -125,7 +126,7 @@ export async function lookupRelevantQAs(userQuestion, topK = 8, minScore = DEFAU
   
   try {
     // Get embedding for the question with context
-    const emb = await getEmbedding(normalize(userQuestion + context));
+    const emb = await safeCall(() => getEmbedding(normalize(userQuestion + context)), { fallback: () => [] });
     
     // Query the database with a higher limit to allow for filtering
     const { rows } = await pool.query(

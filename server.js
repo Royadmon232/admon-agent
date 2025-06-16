@@ -56,4 +56,12 @@ process.on('uncaughtException', (error) => {
 
 process.on('unhandledRejection', (error) => {
   console.error('[Server] Unhandled rejection:', error);
+});
+
+// Add this after all routes:
+app.use((err, req, res, next) => {
+  if (err && err.name === "OpenAIError") {
+    return res.json({ text: "⚠️ השירות עמוס כעת, נחזור אליך בקרוב." });
+  }
+  next(err);
 }); 

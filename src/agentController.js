@@ -7,12 +7,13 @@ import { smartAnswer } from "../services/ragChain.js";
 import { sendWapp } from '../services/twilioService.js';
 import { normalize } from "../utils/normalize.js";
 import { splitQuestions } from "../utils/splitQuestions.js";
+import { safeCall } from './utils/safeCall.js';
 
 const EMB_MODEL = "text-embedding-3-small";
 const SEMANTIC_THRESHOLD = 0.65;
 const PRIMARY_MODEL = 'text-embedding-3-small';
 const FALLBACK_MODEL = 'text-embedding-ada-002';
-const MAX_CONTEXT_LENGTH = 10000;
+const MAX_CONTEXT_LENGTH = 100000;
 
 // Load knowledge base once at startup
 let KNOWLEDGE = [];
@@ -96,35 +97,36 @@ export async function handleMessage(phone, userMsg) {
     // Process each question
     for (const question of questions) {
       console.info(`[handleMessage] Processing question: "${question}"`);
-      
-      // Check conversation memory for related questions
-      const relatedQuestion = findSimilarPreviousQuestion(question, history, SEMANTIC_THRESHOLD);
-      
-      let answer;
-      if (relatedQuestion) {
-        // Use contextual answer for related questions
-        console.info('[handleMessage] Found related question in history');
-        answer = await smartAnswer(question, history);
-      } else {
-        // Try vector search for new questions
-        console.info('[handleMessage] No related question found, trying vector search');
-        const relevantQAs = await lookupRelevantQAs(question, SEMANTIC_THRESHOLD);
-        
+      let answer = null;
+      // 1. Try contextual answer (history) via GPT-4o
+      answer = await safeCall(
+        () => smartAnswer(question, history),
+        { fallback: () => null }
+      );
+      // 2. If null, try RAG (vector search)
+      if (answer == null) {
+        const relevantQAs = await safeCall(
+          () => lookupRelevantQAs(question, SEMANTIC_THRESHOLD),
+          { fallback: () => [] }
+        );
         if (relevantQAs && relevantQAs.length > 0) {
-          // Use smartAnswer with relevant QAs
-          answer = await smartAnswer(question, history, relevantQAs);
-        } else {
-          // Fallback to direct GPT-4o answer
-          console.info('[handleMessage] No relevant QAs found, using direct GPT-4o');
-          answer = await smartAnswer(question, history);
+          answer = await safeCall(
+            () => smartAnswer(question, history, relevantQAs),
+            { fallback: () => null }
+          );
         }
       }
-      
-      // Ensure we have a valid answer
-      if (!answer) {
-        answer = "מצטער, אני לא בטוח לגבי התשובה לשאלה זו. אשמח לבדוק ולחזור אליך עם מידע מדויק.";
+      // 3. If still null, try direct GPT-4o answer (no context)
+      if (answer == null) {
+        answer = await safeCall(
+          () => smartAnswer(question, []),
+          { fallback: () => 'מצטער, אני בודק וחוזר אליך מיד.' }
+        );
       }
-      
+      // 4. If GPT fails, use safe default
+      if (!answer) {
+        answer = 'מצטער, אני בודק וחוזר אליך מיד.';
+      }
       answers.push(answer);
     }
     
@@ -349,4 +351,5 @@ export async function processMessage(text, memory = {}) {
     };
   }
 }
+
 
