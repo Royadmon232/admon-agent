@@ -1,6 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { withTimeout } from './llmTimeout.js';
 
 const model = new ChatOpenAI({
   modelName: "gpt-4o",
@@ -33,7 +32,7 @@ export async function splitQuestions(text) {
       new HumanMessage(text)
     ];
 
-    const response = await withTimeout(model.invoke(messages), 20000);
+    const response = await model.invoke(messages);
     
     // Try to parse as JSON first
     try {

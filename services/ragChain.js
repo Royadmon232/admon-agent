@@ -8,7 +8,6 @@ import pg from 'pg';
 import 'dotenv/config';
 import kbConfig from '../src/insuranceKbConfig.js';
 import { normalize } from '../utils/normalize.js';
-import { withTimeout } from '../utils/llmTimeout.js';
 import { splitQuestions } from '../utils/splitQuestions.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -81,7 +80,7 @@ let chain = null;
 async function searchInsuranceQA(question, limit = 10, threshold = 0.65) {
   try {
     // Get embedding for the question
-    const questionEmbedding = await embeddings.embedTextQuery(question);
+    const questionEmbedding = await embeddings.embedQuery(question);
     
     // Query the database directly with cosine similarity
     const result = await pool.query(`
@@ -251,10 +250,10 @@ async function mergeAnswersWithGPT(answerGroups, originalQuestion, historyContex
   const userPrompt = `השאלה המקורית של הלקוח: ${originalQuestion}\n\nמידע שנמצא במאגר:\n${contextBlock}\n\n${historyContext}\n\nאנא תן תשובה מקיפה ומקצועית לשאלת הלקוח.`;
 
   try {
-    const response = await withTimeout(llm.invoke([
+    const response = await llm.invoke([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
-    ]), 20000);
+    ]);
     
     return response.content.trim();
   } catch (error) {
@@ -406,7 +405,7 @@ export async function smartAnswer(question, context = []) {
     ];
 
     try {
-      const response = await withTimeout(llm.call(messages), 20000);
+      const response = await llm.call(messages);
       return response.content.trim();
     } catch (err) {
       console.error('[RAG] GPT-4o fallback error:', err);
@@ -464,7 +463,7 @@ ${conversationHistory}
         { role: 'user', content: 'ענה על השאלה הנוכחית בהתבסס על ההיסטוריה. תן תשובה מקיפה בעברית.' }
       ].filter(m => m && typeof m === 'object' && m.content);
 
-      const response = await withTimeout(llm.call(messages), 20000);
+      const response = await llm.call(messages);
       
       console.debug('[RAG] Generated follow-up response');
       return response.content.trim();
@@ -581,7 +580,7 @@ ${conversationHistory}
         { role: 'user', content: 'ענה על השאלה בצורה מקצועית ומקיפה.' }
       ].filter(m => m && typeof m === 'object' && m.content);
 
-      const response = await withTimeout(llm.invoke(messages), 20000);
+      const response = await llm.invoke(messages);
       
       return response.content.trim();
     }
@@ -654,7 +653,7 @@ async function mergeAnswersWithGPTWithContext(answerGroups, originalQuestion, sy
   ].filter(m => m && typeof m === 'object' && m.content);
 
   try {
-    const response = await withTimeout(llm.invoke(messages), 20000);
+    const response = await llm.invoke(messages);
     return response.content.trim();
   } catch (error) {
     console.error('[LangChain] Error merging answers with GPT:', error);
