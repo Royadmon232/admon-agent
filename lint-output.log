@@ -1,0 +1,96 @@
+
+> insurance-whatsapp-bot@1.0.0 lint
+> eslint . --fix
+
+
+/Users/royadmon1/Documents/insurance_whatsapBot/index.js
+    6:3   error  'sendWhatsAppMessageWithButton' is defined but never used                 no-unused-vars
+    7:3   error  'logDelivery' is defined but never used                                   no-unused-vars
+   54:7   error  'WHATSAPP_API_TOKEN' is assigned a value but never used                   no-unused-vars
+   55:7   error  'WHATSAPP_PHONE_NUMBER_ID' is assigned a value but never used             no-unused-vars
+   75:7   error  'KNOWLEDGE' is assigned a value but never used                            no-unused-vars
+  418:47  error  'memory' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  421:32  error  'extractCustomerInfo' is not defined                                      no-undef
+  538:15  error  'phone_number_id' is assigned a value but never used                      no-unused-vars
+
+/Users/royadmon1/Documents/insurance_whatsapBot/scripts/generateEmbeddings.js
+  13:7  error  'EMBEDDING_VECTOR_DIMENSION' is assigned a value but never used  no-unused-vars
+
+/Users/royadmon1/Documents/insurance_whatsapBot/server.js
+   1:1   error  'app' is not defined                    no-undef
+  24:11  error  'handleIncomingMessage' is not defined  no-undef
+  35:1   error  'app' is not defined                    no-undef
+  42:1   error  'app' is not defined                    no-undef
+  62:1   error  'app' is not defined                    no-undef
+
+/Users/royadmon1/Documents/insurance_whatsapBot/services/memoryService.js
+  140:19  error  Do not access Object.prototype method 'hasOwnProperty' from target object  no-prototype-builtins
+
+/Users/royadmon1/Documents/insurance_whatsapBot/services/ragChain.js
+    5:10  error  'PromptTemplate' is defined but never used           no-unused-vars
+    5:46  error  'MessagesPlaceholder' is defined but never used      no-unused-vars
+    6:24  error  'AIMessage' is defined but never used                no-unused-vars
+   14:25  error  'resolve' is defined but never used                  no-unused-vars
+   19:7   error  '__dirname' is assigned a value but never used       no-unused-vars
+   31:3   error  'salesTemplates' is assigned a value but never used  no-unused-vars
+   72:5   error  'chain' is assigned a value but never used           no-unused-vars
+  224:16  error  'mergeAnswersWithGPT' is defined but never used      no-unused-vars
+
+/Users/royadmon1/Documents/insurance_whatsapBot/services/salesTemplates.js
+  7:7  error  'templates' is assigned a value but never used  no-unused-vars
+
+/Users/royadmon1/Documents/insurance_whatsapBot/services/vectorSearch.js
+  186:24  error  'searchWithScore' is not defined  no-undef
+  199:31  error  'searchWithScore' is not defined  no-undef
+
+/Users/royadmon1/Documents/insurance_whatsapBot/services/whatsappService.js
+    1:10  error  'normalize' is defined but never used                                            no-unused-vars
+    2:10  error  'createRetrievalChain' is defined but never used                                 no-unused-vars
+    3:10  error  'smartAnswer' is defined but never used                                          no-unused-vars
+    4:10  error  'intentDetect' is defined but never used                                         no-unused-vars
+    4:24  error  'buildSalesResponse' is defined but never used                                   no-unused-vars
+   20:7   error  'queue' is assigned a value but never used                                       no-unused-vars
+   90:24  error  'client' is defined but never used. Allowed unused args must match /^_/u         no-unused-vars
+  102:37  error  'imageBuffer' is defined but never used. Allowed unused args must match /^_/u    no-unused-vars
+  136:11  error  'history' is assigned a value but never used                                     no-unused-vars
+  139:28  error  'handleMessage' is not defined                                                   no-undef
+  154:16  error  'handleTextMessage' is defined but never used                                    no-unused-vars
+  157:9   error  'messageId' is assigned a value but never used                                   no-unused-vars
+  171:9   error  'history' is assigned a value but never used                                     no-unused-vars
+  174:26  error  'handleMessage' is not defined                                                   no-undef
+  186:16  error  'handleImageMessage' is defined but never used                                   no-unused-vars
+  210:28  error  'handleMessage' is not defined                                                   no-undef
+  254:27  error  'prisma' is not defined                                                          no-undef
+  280:11  error  'prisma' is not defined                                                          no-undef
+  416:27  error  'getHistory' is not defined                                                      no-undef
+  540:11  error  'result' is assigned a value but never used                                      no-unused-vars
+  576:79  error  'buttonPayload' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+/Users/royadmon1/Documents/insurance_whatsapBot/src/agentController.js
+    2:8   error  'axios' is defined but never used                                                no-unused-vars
+   12:7   error  'EMB_MODEL' is assigned a value but never used                                   no-unused-vars
+   14:7   error  'PRIMARY_MODEL' is assigned a value but never used                               no-unused-vars
+   15:7   error  'FALLBACK_MODEL' is assigned a value but never used                              no-unused-vars
+  182:10  error  'findSimilarPreviousQuestion' is defined but never used                          no-unused-vars
+  232:79  error  'buttonPayload' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+/Users/royadmon1/Documents/insurance_whatsapBot/test_twilio_limit.js
+  5:7  error  'originalTwilio' is assigned a value but never used  no-unused-vars
+  8:7  error  'mockClient' is assigned a value but never used      no-unused-vars
+
+/Users/royadmon1/Documents/insurance_whatsapBot/utils/dbUtils.js
+  1:8  error  'pool' is defined but never used  no-unused-vars
+
+/Users/royadmon1/Documents/insurance_whatsapBot/utils/normalize.js
+  2:8  error  'removeAccents' is defined but never used                  no-unused-vars
+  5:7  error  'HEBREW_FINAL_LETTERS' is assigned a value but never used  no-unused-vars
+
+/Users/royadmon1/Documents/insurance_whatsapBot/utils/send.js
+  23:42  error  'buttons' is assigned a value but never used  no-unused-vars
+
+/Users/royadmon1/Documents/insurance_whatsapBot/utils/splitQuestions.js
+  58:36  error  Unnecessary escape character: \.  no-useless-escape
+  58:38  error  Unnecessary escape character: \)  no-useless-escape
+
+✖ 61 problems (61 errors, 0 warnings)
+

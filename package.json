@@ -9,7 +9,9 @@
     "embed": "node scripts/generateEmbeddings.js",
     "seed:embeddings": "node scripts/generateEmbeddings.js",
     "lint": "eslint . --fix",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
+    "build": "npm run lint && npm run test"
   },
   "dependencies": {
     "@langchain/community": "^0.0.11",

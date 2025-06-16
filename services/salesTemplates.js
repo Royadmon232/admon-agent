@@ -1,4 +1,10 @@
-import templates from "../marketing_templates.json" with { type: "json" };
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const templates = JSON.parse(readFileSync(join(__dirname, '../marketing_templates.json'), 'utf8'));
 
 // Add CTA templates
 const CTA_TEMPLATES = {

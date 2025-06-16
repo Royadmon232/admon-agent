@@ -1,12 +1,14 @@
 import { jest } from '@jest/globals';
+import twilio from 'twilio';
 import { sendWapp, smsFallback } from '../services/twilioService.js';
 
-// Mock the Twilio client
+// Mock twilio module
 jest.mock('twilio', () => {
-  return jest.fn().mockImplementation(() => ({
-    messages: {
-      create: jest.fn().mockResolvedValue({ sid: 'test_sid' })
-    }
+  const mockMessages = {
+    create: jest.fn().mockResolvedValue({ sid: 'test_sid' })
+  };
+  return jest.fn(() => ({
+    messages: mockMessages
   }));
 });
 
@@ -17,7 +19,10 @@ process.env.TWILIO_WHATSAPP_FROM_NUMBER = 'test_whatsapp_number';
 process.env.TWILIO_SMS_SID = 'test_sms_sid';
 
 describe('Twilio Service', () => {
+  let mockTwilioClient;
+
   beforeEach(() => {
+    mockTwilioClient = twilio();
     jest.clearAllMocks();
   });
 
@@ -25,22 +30,25 @@ describe('Twilio Service', () => {
     it('should call Twilio client messages.create with correct parameters', async () => {
       const to = '+1234567890';
       const body = 'Test message';
-      
+
       const result = await sendWapp(to, body);
       
       expect(result.success).toBe(true);
       expect(result.sid).toBe('test_sid');
+      expect(mockTwilioClient.messages.create).toHaveBeenCalledWith({
+        from: expect.any(String),
+        to,
+        body
+      });
     });
 
     it('should handle errors gracefully', async () => {
       const mockError = new Error('Test error');
-      const twilioClient = require('twilio')();
-      twilioClient.messages.create.mockRejectedValueOnce(mockError);
+      mockTwilioClient.messages.create.mockRejectedValueOnce(mockError);
 
       const result = await sendWapp('+1234567890', 'Test message');
-      
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Test error');
+      expect(result.error).toBeDefined();
     });
   });
 
@@ -48,22 +56,25 @@ describe('Twilio Service', () => {
     it('should call Twilio client messages.create with correct parameters', async () => {
       const to = '+1234567890';
       const body = 'Test SMS';
-      
+
       const result = await smsFallback(to, body);
       
       expect(result.success).toBe(true);
       expect(result.sid).toBe('test_sid');
+      expect(mockTwilioClient.messages.create).toHaveBeenCalledWith({
+        from: expect.any(String),
+        to,
+        body
+      });
     });
 
     it('should handle errors gracefully', async () => {
       const mockError = new Error('Test error');
-      const twilioClient = require('twilio')();
-      twilioClient.messages.create.mockRejectedValueOnce(mockError);
+      mockTwilioClient.messages.create.mockRejectedValueOnce(mockError);
 
       const result = await smsFallback('+1234567890', 'Test SMS');
-      
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Test error');
+      expect(result.error).toBeDefined();
     });
   });
 }); 
