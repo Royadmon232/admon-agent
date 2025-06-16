@@ -75,10 +75,8 @@ export async function handleMessage(phone, userMsg) {
     });
     
     // Handle greeting immediately
-    if (intent === "greeting" && history.length === 0) {
-      const greetingResponse = customer.firstName 
-        ? `שלום ${customer.firstName}! אני דוני, סוכן ביטוח דירות. שמח לעזור לך 😊 איך אוכל לעזור?`
-        : "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך 😊 איך אוכל לעזור?";
+    if (intent === "greeting") {
+      const greetingResponse = buildSalesResponse("greeting", customer);
       
       await appendExchange(phone, normalizedMsg, greetingResponse, {
         intent: "greeting",
@@ -98,35 +96,51 @@ export async function handleMessage(phone, userMsg) {
     for (const question of questions) {
       console.info(`[handleMessage] Processing question: "${question}"`);
       let answer = null;
-      // 1. Try contextual answer (history) via GPT-4o
-      answer = await safeCall(
-        () => smartAnswer(question, history),
-        { fallback: () => null }
-      );
-      // 2. If null, try RAG (vector search)
-      if (answer == null) {
-        const relevantQAs = await safeCall(
-          () => lookupRelevantQAs(question, SEMANTIC_THRESHOLD),
-          { fallback: () => [] }
+      
+      // 1. First, check if this question relates to conversation memory
+      if (history.length > 0) {
+        console.info("[handleMessage] Checking conversation memory...");
+        answer = await safeCall(
+          () => smartAnswer(question, history),
+          { fallback: () => null }
         );
-        if (relevantQAs && relevantQAs.length > 0) {
-          answer = await safeCall(
-            () => smartAnswer(question, history, relevantQAs),
-            { fallback: () => null }
-          );
+        
+        if (answer) {
+          console.info("[handleMessage] Found answer in conversation memory");
+          answers.push(answer);
+          continue;
         }
       }
-      // 3. If still null, try direct GPT-4o answer (no context)
-      if (answer == null) {
+      
+      // 2. If no answer from memory, try RAG (vector search)
+      console.info("[handleMessage] No answer in memory, trying RAG vector search...");
+      const relevantQAs = await safeCall(
+        () => lookupRelevantQAs(question, SEMANTIC_THRESHOLD),
+        { fallback: () => [] }
+      );
+      
+      if (relevantQAs && relevantQAs.length > 0) {
+        console.info(`[handleMessage] Found ${relevantQAs.length} RAG matches`);
         answer = await safeCall(
-          () => smartAnswer(question, []),
+          () => smartAnswer(question, history, relevantQAs),
+          { fallback: () => null }
+        );
+      }
+      
+      // 3. If still no answer, use GPT-4o general knowledge
+      if (!answer) {
+        console.info("[handleMessage] No RAG matches, using GPT-4o general knowledge...");
+        answer = await safeCall(
+          () => smartAnswer(question, []), // Empty history to force general knowledge
           { fallback: () => 'מצטער, אני בודק וחוזר אליך מיד.' }
         );
       }
+      
       // 4. If GPT fails, use safe default
       if (!answer) {
         answer = 'מצטער, אני בודק וחוזר אליך מיד.';
       }
+      
       answers.push(answer);
     }
     

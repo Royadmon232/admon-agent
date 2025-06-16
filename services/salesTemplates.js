@@ -34,8 +34,11 @@ export function intentDetect(text) {
   const lowerText = text.toLowerCase();
   
   // Check for greeting first
-  const greetingRegex = /^(שלום|היי|הי|hi|hello|hey|בוקר טוב|צהריים טובים|ערב טוב)[.!? ]*$/i;
-  if (greetingRegex.test(lowerText.trim())) return "greeting";
+  const greetingRegex = /^(שלום|היי|הי|hi|hello|hey|בוקר טוב|צהריים טובים|ערב טוב|שלומ)[.!? ]*$/i;
+  if (greetingRegex.test(lowerText.trim())) {
+    console.debug('[IntentDetect] Greeting detected:', lowerText);
+    return "greeting";
+  }
 
   // Follow-up patterns
   const followUpPatterns = [
@@ -197,30 +200,12 @@ export function buildSalesResponse(intent, memory = {}) {
 
   // Choose template based on memory state
   const chosenTemplate = chooseCTA(intent, memory);
-  
-  // Clean empty placeholders
-  const clean = (text, key, value) => {
-    if (!text || !value) return text || '';
-    return text.replace(`{{${key}}}`, value);
-  };
-
-  let response = chosenTemplate;
-  response = clean(response, "name", memory?.firstName || "");
-  response = clean(response, "city", memory?.city || "");
-  response = clean(response, "home_value", memory?.homeValue || "");
-
-  // Collapse double spaces
-  response = response.replace(/\s{2,}/g, " ").trim();
-
-  // Add CTA based on intent
-  if (intent === 'lead_gen' || intent === 'info_gathering' || intent === 'close') {
-    const cta = chooseCTA(intent, memory);
-    if (cta && !response.includes(cta)) {
-      response = `${response}\n\n${cta}`;
-    }
+  if (chosenTemplate) {
+    return chosenTemplate;
   }
 
-  return response;
+  // Default response if no template matches
+  return "אשמח לעזור לך עם כל שאלה לגבי ביטוח דירה. איך אוכל לסייע?";
 }
 
 export function chooseCTA(intent, memory = {}) {

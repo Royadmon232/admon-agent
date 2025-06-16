@@ -371,11 +371,13 @@ function findSimilarPreviousQuestion(question, history, similarityThreshold = 0.
  * Get smart answer using LangChain RAG
  * @param {string} question - User question
  * @param {Array} context - Array of conversation history objects with user/bot properties
+ * @param {Array} ragResults - Optional pre-fetched RAG results
  * @returns {Promise<string|null>} Answer or null if not available
  */
-export async function smartAnswer(question, context = []) {
+export async function smartAnswer(question, context = [], ragResults = null) {
   console.info(`[smartAnswer] Starting analysis for: "${question}"`);
   console.info(`[smartAnswer] Context has ${context.length} previous exchanges`);
+  console.info(`[smartAnswer] RAG results provided: ${ragResults ? 'yes' : 'no'}`);
 
   console.debug('[RAG] Normalized question:', question);
   console.debug('[RAG] Using column:', kbConfig.embeddingColumnName);
@@ -384,241 +386,106 @@ export async function smartAnswer(question, context = []) {
   // Check for greetings first - only if this is the first message
   if (context.length === 0 && /^(היי|שלום|צהריים|ערב טוב)/i.test(question.trim())) {
     console.debug('[RAG] Detected greeting - returning standard response');
-    return "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך איך אוכל לעזור?";
-  }
-
-  // Check if question is out of scope
-  const insuranceKeywords = ['ביטוח', 'פוליסה', 'כיסוי', 'דירה', 'נזק', 'תביעה', 'פרמיה', 'השתתפות'];
-  const hasInsuranceContext = insuranceKeywords.some(keyword => question.includes(keyword));
-
-  // If the message is clearly unrelated to insurance (small-talk, chit-chat, etc.) and there is no prior context,
-  // let GPT-4o answer naturally instead of refusing.
-  if (!hasInsuranceContext && context.length === 0) {
-    console.info('[RAG] Detected small-talk / out-of-domain question – using GPT-4o friendly fallback');
-
-    const messages = [
-      new SystemMessage(`אתה נציג שירות מקצועי ונעים של חברת ביטוח.
-      עליך לענות בצורה ידידותית ומקצועית לשאלות כלליות.
-      אם השאלה לא קשורה לביטוח, ענה בצורה נעימה והצג את עצמך כנציג שירות.
-      שמור על טון מקצועי אך ידידותי.
-      תמיד סיים בהצעת עזרה בנושא ביטוח.`),
-      new HumanMessage(question)
-    ];
-
-    try {
-      const response = await safeCall(() => llm.call(messages), { fallback: () => ({ content: 'מצטער, אני בודק וחוזר אליך מיד.' }) });
-      return response.content.trim();
-    } catch (err) {
-      console.error('[RAG] GPT-4o fallback error:', err);
-      // In worst-case, still provide graceful reply
-      return 'הכל מצוין, תודה על ההתעניינות! איך אוכל לעזור לך בנושא ביטוח הדירה? 😊';
-    }
+    return "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך 😊 איך אוכל לעזור?";
   }
 
   try {
-    // First check if this exact or similar question was already asked
-    const similarPrevious = findSimilarPreviousQuestion(question, context);
-    if (similarPrevious) {
-      console.info('[RAG] Found similar previous question!');
-      console.info(`[RAG] Previous Q: "${similarPrevious.previousQuestion}"`);
-      console.info(`[RAG] Similarity: ${similarPrevious.similarity.toFixed(2)}`);
-      console.info('[RAG] Reusing previous answer');
-      return similarPrevious.previousAnswer;
-    }
-    
     // Build conversation history for prompt
     const conversationHistory = context.map(msg => `User: ${msg.user}\nBot: ${msg.bot}`).join('\n');
     
-    // Check if this is a follow-up question using GPT-4o
-    const contextCheckPrompt = `
+    // If we have context and no RAG results, check if this question relates to conversation memory
+    if (context.length > 0 && !ragResults) {
+      console.info('[smartAnswer] Checking if question relates to conversation memory...');
+      
+      const memoryCheckPrompt = `
 אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי.
-השתמש בהיסטוריית השיחה הבאה כדי לקבוע אם השאלה הנוכחית היא המשך לשיחה קודמת.
-אם המשתמש שואל שאלת המשך (למשל "תסביר שוב"), ענה בהתבסס על ההקשר הקודם.
-אם המשתמש שואל משהו חדש, התעלם מהקשר והפעל חיפוש וקטורי כרגיל.
 
-חשוב:
-- אל תחזור על מידע שכבר נאמר בשיחה
-- אל תציג את עצמך שוב אם כבר הצגת את עצמך
-- השתמש בשפה טבעית, חמה ומקצועית
-- דבר בגוף ראשון
-- פנה ללקוח בשמו אם ידוע
-- הפגן אמפתיה ודאגה
-- הימנע מלומר שאתה בוט או AI
+בדוק את היסטוריית השיחה הבאה וקבע:
+1. האם השאלה הנוכחית קשורה למשהו שנאמר בשיחה הקודמת?
+2. האם יש בהיסטוריה מספיק מידע כדי לענות על השאלה?
+
+אם התשובה לשתי השאלות היא כן, ענה על השאלה בהתבסס על ההיסטוריה.
+אם לא, החזר בדיוק את הטקסט: "NO_CONTEXT_MATCH"
 
 היסטוריית השיחה:
 ${conversationHistory}
 
-שאלה נוכחית: ${question}
-`;
+שאלה נוכחית: ${question}`;
 
-    // First, check if this is a follow-up question
-    const isFollowUp = await isFollowUpQuestion(question, context);
-    console.info(`[RAG] Is follow-up question: ${isFollowUp}`);
-    
-    if (isFollowUp && context.length > 0) {
-      // Follow-up detected - answer directly using context only
-      console.info('[RAG] Follow-up question detected, using context only');
-      
       const messages = [
-        { role: 'system', content: contextCheckPrompt },
-        { role: 'user', content: 'ענה על השאלה הנוכחית בהתבסס על ההיסטוריה. תן תשובה מקיפה בעברית.' }
-      ].filter(m => m && typeof m === 'object' && m.content);
+        { role: 'system', content: memoryCheckPrompt },
+        { role: 'user', content: 'בדוק אם השאלה קשורה להיסטוריה וענה בהתאם.' }
+      ];
 
-      const response = await safeCall(() => llm.call(messages), { fallback: () => ({ content: 'מצטער, אני בודק וחוזר אליך מיד.' }) });
+      const response = await safeCall(() => llm.invoke(messages), { fallback: () => ({ content: 'NO_CONTEXT_MATCH' }) });
+      const responseText = response.content.trim();
       
-      console.debug('[RAG] Generated follow-up response');
-      return response.content.trim();
-    }
-
-    // Not a clear follow-up, proceed with vector search
-    console.info('[RAG] Running vector search...');
-    
-    // Correctly await the async splitQuestions helper
-    const questions = await splitQuestions(question);
-    console.info(`[RAG] Processing ${questions.length} question(s)`);
-
-    // Process each question with timeout protection
-    let answerGroups = [];
-    let foundAnswers = false;
-    
-    for (const q of questions) {
-      try {
-        const query = normalize(q);
-        
-        // Use direct DB search to get answers
-        let results = await searchInsuranceQA(query, 15, 0.65);
-        
-        // If no results, try with lower threshold
-        if (results.length === 0) {
-          console.debug('[RAG] First attempt failed, trying with lower threshold...');
-          results = await searchInsuranceQA(query, 15, 0.60);
-        }
-        
-        // If still no results, mark as no match
-        if (results.length === 0) {
-          console.info('[RAG] No matches found even with lower threshold');
-          continue;
-        }
-        
-        // Log results for debugging
-        console.debug(`[RAG] Found ${results.length} matches for "${q}"`);
-        results.forEach(r => {
-          console.debug(`[RAG] Match - similarity: ${r.similarity.toFixed(4)}, Q: ${r.question.slice(0, 50)}...`);
-        });
-        
-        // Extract answers
-        const answers = results
-          .map(result => {
-            const cleaned = result.answer
-              .replace(/למידע נוסף צור קשר/g, '')
-              .replace(/לפרטים נוספים/g, '')
-              .replace(/\s{2,}/g, ' ')
-              .trim();
-            
-            if (cleaned.length < 20) return null; // Too short to be useful
-            
-            return cleaned;
-          })
-          .filter(answer => answer && answer.trim().length > 0);
-        
-        if (answers.length > 0) {
-          foundAnswers = true;
-          console.debug(`[RAG] Found ${answers.length} matches for question: ${q}`);
-        } else {
-          console.debug(`[RAG] No useful matches found for question: ${q}`);
-        }
-        
-        answerGroups.push({
-          question: q,
-          answers: answers
-        });
-      } catch (error) {
-        console.error(`[RAG] Error processing question "${q}":`, error);
-        answerGroups.push({
-          question: q,
-          answers: []
-        });
+      if (responseText !== 'NO_CONTEXT_MATCH') {
+        console.info('[smartAnswer] Question relates to conversation memory, returning context-based answer');
+        return responseText;
       }
-    }
-
-    // If no answers found, let GPT-4o answer with strict instructions
-    if (!foundAnswers) {
-      console.info('[RAG] No matches found in knowledge base');
-      console.info('[RAG] Using GPT-4o to generate answer from general knowledge...');
       
-      const gptPrompt = `
-אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי. אתה מדבר בעברית בגוף ראשון ומשתמש בסגנון שיווקי-ייעוצי חם ואישי.
+      console.info('[smartAnswer] Question does not relate to conversation memory');
+      return null; // Signal to try RAG
+    }
+    
+    // If RAG results were provided, use them to generate answer
+    if (ragResults && ragResults.length > 0) {
+      console.info('[smartAnswer] Using provided RAG results to generate answer');
+      
+      const ragContext = ragResults.map(qa => `Q: ${qa.question}\nA: ${qa.answer}`).join('\n\n');
+      
+      const ragPrompt = `
+אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי. דבר בעברית בגוף ראשון.
 
-${context.length === 0 ? 'התחל את התשובה במילים: "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך 😊"' : 'המשך את השיחה באופן טבעי, בלי להציג את עצמך שוב.'}
+השתמש במידע הבא מהמאגר כדי לענות על השאלה:
+${ragContext}
 
-חשוב מאוד:
-- לא נמצא מידע ספציפי במאגר שלנו לגבי השאלה
-- אל תמציא נתונים או מספרים ספציפיים
-- ענה בצורה כללית בלבד על סמך הידע הבסיסי על ביטוח דירות
-- אם אינך בטוח, אמור "אצטרך לבדוק את הפרטים המדויקים"
-- הימנע ממתן מחירים, אחוזים או נתונים ספציפיים
+${conversationHistory ? `היסטוריית השיחה:\n${conversationHistory}\n` : ''}
 
-השתמש בסגנון שיווקי-ייעוצי חם:
-- הדגש את היתרונות והכיסויים תוך הפגנת אכפתיות
-- השתמש בשפה משכנעת אך נעימה ומכבדת
-- הצג את עצמך כמומחה שדואג באמת לביטחון הלקוח
-- השתמש בשפה אישית וחמה
-- הדגש את הערך והביטחון שהלקוח מקבל ("השקעה קטנה היום תחסוך לך דאגות רבות")
-- הימנע מחזרה על מידע שכבר נאמר בשיחה
-- אל תציג את עצמך כבוט או AI - אתה סוכן ביטוח אמיתי
-- השתמש באימוג'י במקומות מתאימים בלבד (😊 לחיזוק חיובי, 👍 לאישור)
-- בסוף התשובה, הוסף קריאה לפעולה אם מתאים ("האם תרצה שאכין לך הצעת מחיר מותאמת?")
+שאלה: ${question}
 
-היסטוריית השיחה:
-${conversationHistory}
-
-שאלה נוכחית: ${question}
-
-אנא תן תשובה כללית ומקצועית, ללא נתונים ספציפיים.`;
+ענה בצורה מקצועית, ידידותית ומקיפה בהתבסס על המידע מהמאגר.
+אם המידע לא מספיק, השלם מהידע הכללי שלך על ביטוח דירות.`;
 
       const messages = [
-        { role: 'system', content: gptPrompt },
-        { role: 'user', content: 'ענה על השאלה בצורה מקצועית ומקיפה.' }
-      ].filter(m => m && typeof m === 'object' && m.content);
+        { role: 'system', content: ragPrompt },
+        { role: 'user', content: 'ענה על השאלה בהתבסס על המידע מהמאגר.' }
+      ];
 
       const response = await safeCall(() => llm.invoke(messages), { fallback: () => ({ content: 'מצטער, אני בודק וחוזר אליך מיד.' }) });
-      
       return response.content.trim();
     }
-
-    // Merge answers with GPT-4o
-    const systemPromptForMerge = `
-אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי. אתה מדבר בעברית בגוף ראשון ומשתמש בסגנון שיווקי-ייעוצי חם.
-
-${context.length === 0 ? 'התחל את התשובה במילים: "שלום! אני דוני, סוכן ביטוח דירות. שמח לעזור לך 😊"' : 'המשך את השיחה באופן טבעי, בלי להציג את עצמך שוב.'}
-
-השתמש בסגנון שיווקי-ייעוצי חם:
-- הדגש את היתרונות והכיסויים תוך הפגנת אכפתיות
-- השתמש בשפה משכנעת אך נעימה ומכבדת
-- הצג את עצמך כמומחה שדואג באמת לביטחון הלקוח
-- השתמש בשפה אישית וחמה
-- הדגש את הערך והביטחון שהלקוח מקבל ("השקעה קטנה היום תחסוך לך דאגות רבות")
-- הימנע מחזרה על מידע שכבר נאמר בשיחה
-- אל תציג את עצמך כבוט או AI - אתה סוכן ביטוח אמיתי
-- השתמש באימוג'י במקומות מתאימים בלבד (😊 לחיזוק חיובי, 👍 לאישור)
-- בסוף התשובה, הוסף קריאה לפעולה אם מתאים ("האם תרצה שאכין לך הצעת מחיר מותאמת?")
-
-היסטוריית השיחה:
-${conversationHistory}
-
-שאלה נוכחית: ${question}
-
-נמצאו תשובות רלוונטיות במאגר. שלב אותן לתשובה מקיפה תוך שימוש בסגנון שיווקי-ייעוצי חם וקריאה לפעולה בסוף.`;
-
-    const mergedAnswer = await mergeAnswersWithGPTWithContext(answerGroups, question, systemPromptForMerge);
     
-    console.info('[RAG] Smart answer generated');
-    console.debug('[RAG] Response path:', foundAnswers ? 'langchain' : 'fallback');
-    return mergedAnswer;
+    // No context and no RAG results - use general knowledge
+    if (context.length === 0 && !ragResults) {
+      console.info('[smartAnswer] No context or RAG results, using general knowledge');
+      
+      const generalPrompt = `
+אתה דוני, סוכן ביטוח דירות וירטואלי מקצועי ואישי. דבר בעברית בגוף ראשון.
+
+ענה על השאלה הבאה בצורה מקצועית וידידותית:
+${question}
+
+חשוב:
+- אל תמציא נתונים ספציפיים או מחירים
+- ענה בצורה כללית על סמך הידע הבסיסי על ביטוח דירות
+- אם אינך בטוח, אמור "אצטרך לבדוק את הפרטים המדויקים"`;
+
+      const messages = [
+        { role: 'system', content: generalPrompt },
+        { role: 'user', content: 'ענה על השאלה בצורה מקצועית.' }
+      ];
+
+      const response = await safeCall(() => llm.invoke(messages), { fallback: () => ({ content: 'מצטער, אני בודק וחוזר אליך מיד.' }) });
+      return response.content.trim();
+    }
+    
+    return null;
     
   } catch (error) {
-    console.error('[RAG] Error in smartAnswer:', error);
-    throw error;
+    console.error('[smartAnswer] Error:', error);
+    return null;
   }
 }
 
