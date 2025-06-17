@@ -291,16 +291,23 @@ async function processLocalMessage(userMessageText, fromId, simulateMode = false
     let faqAnswer = await handleMessage(clean);
 
     if (faqAnswer) {
-      replyToSend = faqAnswer;
-      conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
-      if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
-        conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
-      }
-      if (simulateMode) return replyToSend;
+      // אם faqAnswer הוא אובייקט עם מערך תשובות, שלח כל אחת בנפרד
+      if (faqAnswer.answers && Array.isArray(faqAnswer.answers)) {
+        for (const ans of faqAnswer.answers) {
+          await sendWhatsAppMessage(fromId, ans);
+        }
+      } else {
+        replyToSend = faqAnswer;
+        conversationMemory[fromId].push({ role: "assistant", content: replyToSend });
+        if (conversationMemory[fromId].length > MEMORY_LIMIT * 2) {
+          conversationMemory[fromId] = conversationMemory[fromId].slice(-MEMORY_LIMIT * 2);
+        }
+        if (simulateMode) return replyToSend;
 
-      console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (from FAQ)`);
-      if (!simulateMode) {
-        await sendWhatsAppMessage(fromId, replyToSend);
+        console.log(`[OUTGOING] To: ${fromId} | Message: ${replyToSend} (from FAQ)`);
+        if (!simulateMode) {
+          await sendWhatsAppMessage(fromId, replyToSend);
+        }
       }
       return;   // stop here – avoid fallback duplicates
     }
@@ -391,7 +398,7 @@ async function handleLocalMessage(phone, msg, messageId = null) {
     }
 
     // Process the message with enhanced memory
-    const { response, memory: updatedMemory } = await processLocalMessage(msg, memory);
+    const { response, answers, memory: updatedMemory } = await processLocalMessage(msg, memory);
     
     // Update customer record with any changes
     if (updatedMemory.stage !== memory.stage) {
@@ -401,8 +408,55 @@ async function handleLocalMessage(phone, msg, messageId = null) {
     // Extract and save any new information from the message
     await extractAndSaveInfo(phone, msg, memory);
 
-    // Send response
-    await sendWhatsAppMessage(phone, response);
+    // שלח כל תשובה בנפרד, ואם תשובה חורגת מהמגבלה, פצל לפסקאות/משפטים
+    const MAX_LENGTH = 1600;
+    function splitByParagraphOrSentence(text) {
+      if (text.length <= MAX_LENGTH) return [text];
+      // פיצול לפסקאות
+      const paras = text.split(/\n\n|\r\n\r\n/);
+      const result = [];
+      let current = '';
+      for (const para of paras) {
+        if ((current + '\n\n' + para).length > MAX_LENGTH) {
+          if (current) result.push(current);
+          if (para.length > MAX_LENGTH) {
+            // פיצול למשפטים
+            const sentences = para.match(/[^.!?\n]+[.!?\n]+/g) || [para];
+            let sentCurrent = '';
+            for (const sent of sentences) {
+              if ((sentCurrent + sent).length > MAX_LENGTH) {
+                if (sentCurrent) result.push(sentCurrent);
+                sentCurrent = sent;
+              } else {
+                sentCurrent += sent;
+              }
+            }
+            if (sentCurrent) result.push(sentCurrent);
+          } else {
+            result.push(para);
+          }
+          current = '';
+        } else {
+          current = current ? current + '\n\n' + para : para;
+        }
+      }
+      if (current) result.push(current);
+      return result;
+    }
+    if (Array.isArray(answers) && answers.length > 0) {
+      for (const ans of answers) {
+        const parts = splitByParagraphOrSentence(ans);
+        for (const part of parts) {
+          await sendWhatsAppMessage(phone, part);
+        }
+      }
+    } else {
+      // תשובה בודדת
+      const parts = splitByParagraphOrSentence(response);
+      for (const part of parts) {
+        await sendWhatsAppMessage(phone, part);
+      }
+    }
     await appendExchange(phone, msg, response);
 
     const processingTime = Date.now() - startTime;

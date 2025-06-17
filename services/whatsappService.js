@@ -458,59 +458,73 @@ export async function isDuplicateMessage(phone, messageId) {
 
 // Enhanced send message with retry logic
 export async function sendWhatsAppMessage(to, body, retries = 3) {
+  const MAX_LENGTH = 1600;
+  // Helper to split message into chunks of up to MAX_LENGTH
+  function splitMessage(msg) {
+    const parts = [];
+    for (let i = 0; i < msg.length; i += MAX_LENGTH) {
+      parts.push(msg.slice(i, i + MAX_LENGTH));
+    }
+    return parts;
+  }
+
+  const parts = splitMessage(body);
   let lastError;
-  
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      console.log(`📤 Sending WhatsApp message (attempt ${attempt}/${retries}):`, {
-        to: to.substring(0, 7) + '***',
-        bodyLength: body.length
-      });
 
-      const result = await sendWapp(to, body);
-      
-      if (result.success) {
-        console.log(`✅ Message sent successfully: ${result.sid}`);
-        await logDelivery(to, body, 'sent', null);
-        return result;
-      } else {
-        throw new Error(result.error || 'Failed to send message');
-      }
-    } catch (error) {
-      lastError = error;
-      console.error(`❌ Attempt ${attempt} failed:`, error.message);
-      
-      // Don't retry on specific errors
-      if (error.code === 21610 || // Unsubscribed recipient
-          error.code === 21614 || // Invalid WhatsApp number
-          error.code === 21408) { // Permission denied
-        console.warn('⚠️ Non-retryable error, stopping attempts');
-        break;
-      }
-      
-      // Wait before retry with exponential backoff
-      if (attempt < retries) {
-        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
+  for (let idx = 0; idx < parts.length; idx++) {
+    const part = parts[idx];
+    let sent = false;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`📤 Sending WhatsApp message part ${idx + 1}/${parts.length} (attempt ${attempt}/${retries}):`, {
+          to: to.substring(0, 7) + '***',
+          bodyLength: part.length
+        });
+
+        const result = await sendWapp(to, part);
+
+        if (result.success) {
+          console.log(`✅ Message part ${idx + 1} sent successfully: ${result.sid}`);
+          await logDelivery(to, part, 'sent', null);
+          sent = true;
+          break;
+        } else {
+          throw new Error(result.error || 'Failed to send message');
+        }
+      } catch (error) {
+        lastError = error;
+        console.error(`❌ Attempt ${attempt} failed for part ${idx + 1}:`, error.message);
+        // Don't retry on specific errors
+        if (error.code === 21610 || // Unsubscribed recipient
+            error.code === 21614 || // Invalid WhatsApp number
+            error.code === 21408) { // Permission denied
+          console.warn('⚠️ Non-retryable error, stopping attempts');
+          break;
+        }
+        // Wait before retry with exponential backoff
+        if (attempt < retries) {
+          const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+          console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
       }
     }
-  }
-
-  // All attempts failed
-  await logDelivery(to, body, 'failed', lastError.message);
-  
-  // Try SMS fallback for critical errors
-  if (lastError.code === 21610) { // Unsubscribed
-    console.log('📱 Attempting SMS fallback...');
-    try {
-      await smsFallback(to, "יש לנו הודעה חשובה עבורך. אנא צור קשר או שלח WhatsApp.");
-    } catch (smsError) {
-      console.error('❌ SMS fallback also failed:', smsError.message);
+    if (!sent) {
+      await logDelivery(to, part, 'failed', lastError.message);
+      // Try SMS fallback for critical errors (only for first part)
+      if (idx === 0 && lastError.code === 21610) { // Unsubscribed
+        console.log('📱 Attempting SMS fallback...');
+        try {
+          await smsFallback(to, "יש לנו הודעה חשובה עבורך. אנא צור קשר או שלח WhatsApp.");
+        } catch (smsError) {
+          console.error('❌ SMS fallback also failed:', smsError.message);
+        }
+      }
+      throw lastError;
     }
   }
-  
-  throw lastError;
+  // Success if all parts sent
+  return { success: true, parts: parts.length };
 }
 
 // Add cleanup function for old conversation history

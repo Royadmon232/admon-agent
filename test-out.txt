@@ -1,0 +1,81 @@
+[RAG] Loading templates from: /Users/royadmon1/Documents/insurance_whatsapBot/marketing_templates.json
+[RAG] Successfully loaded marketing templates
+✅ PromptTemplate loaded correctly
+✅ Loaded 524 knowledge base entries
+Testing restored message handling functionality...
+
+=== Test 1: Single Question (New Topic) ===
+[handleMessage] New message: { phone: '+1234567890', msg: 'מה כולל ביטוח דירה בסיסי?' }
+[IntentDetect] Lead generation detected: מה כולל ביטוח דירה בסיסי?
+[handleMessage] Detected intent: lead_gen
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+✅ LangChain DB connection established using external DATABASE_URL with SSL
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[twilioService] ✅ delivery_log table ready
+✅ TwilioService connected to DB with SSL
+[memoryService] ✅ Updated customer info for +1234567890: { stage: 'engaged' }
+✅ Vector store table structure verified
+[memoryService] ✅ customers and convo_memory tables ready
+[splitQuestions] Found 1 questions (JSON format)
+[handleMessage] Split into questions: 1
+[handleMessage] Processing question: "מה כולל ביטוח דירה בסיסי?"
+[handleMessage] Question related to history: false
+[Context built]: 
+✅ LangChain DB connection established using external DATABASE_URL with SSL (verification disabled)
+[RAG] Retrieved 1 results, filtered to 1
+[RAG] Top matches: [ { q: 'N/A', score: '0.68', chunk: 'undefined/undefined' } ]
+[handleMessage] Found 1 relevant QAs from vector search
+[smartAnswer] Starting analysis for: "מה כולל ביטוח דירה בסיסי?"
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: 1
+[RAG] Normalized question: מה כולל ביטוח דירה בסיסי?
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Using provided relevant QAs from vector search
+[RAG] Invoking LLM with messages: 2
+[RAG] LLM response received: yes
+[RAG] Response content: אשמח לעזור! ביטוח דירה בסיסי כולל בדרך כלל כיסויים כמו ביטוח מבנה וביטוח תכולה. ביטוח המבנה מכסה נזק
+[RAG] Final response content: exists
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[memoryService] ✅ Appended exchange for +1234567890
+Response: {
+  response: 'אשמח לעזור! ביטוח דירה בסיסי כולל בדרך כלל כיסויים כמו ביטוח מבנה וביטוח תכולה. ביטוח המבנה מכסה נזקים פיזיים למבנה הדירה עצמו, כמו קירות, רצפה ותשתיות. ביטוח התכולה מכסה נזקים או גניבה של חפצים אישיים ורכוש שנמצא בתוך הדירה, כמו רהיטים, מכשירי חשמל ותכשיטים.\n' +
+    '\n' +
+    'כמובן, ישנה האפשרות להרחיב את הביטוח הבסיסי עם חבילת ביטוח מורחבת, שמציעה כיסויים נוספים כמו "כל הסיכונים", חבות מעבידים והרחבות סייבר. חבילות אלו מעניקות שקט נפשי גם במקרים מיוחדים אשר הביטוח הבסיסי לא מכסה. ההבדל בעלות בין ביטוח בסיסי למורחב לא תמיד גדול, וזו יכולה להיות השקעה חכמה שתחסוך לך הרבה דאגות במקרה של אירוע לא צפוי. \n' +
+    '\n' +
+    'אם יש לך שאלות נוספות או תרצי לבדוק אפשרויות נוספות שמתאימות במיוחד לצרכים שלך, אני כאן בשבילך!\n' +
+    '\n' +
+    'אשמח לעזור לך עם כל שאלה לגבי ביטוח דירה. איך אוכל לסייע?',
+  intent: 'lead_gen'
+}
+
+
+=== Test 2: Follow-up Question ===
+[handleMessage] New message: { phone: '+1234567890', msg: 'ומה לגבי נזקי מים?' }
+[IntentDetect] Follow-up detected: ומה לגבי נזקי מים?
+[handleMessage] Detected intent: follow_up
+[memoryService] ✅ Updated customer info for +1234567890: { stage: 'engaged' }
+[splitQuestions] Found 1 questions (JSON format)
+[handleMessage] Split into questions: 1
+[handleMessage] Processing question: "ומה לגבי נזקי מים?"
+[handleMessage] Question related to history: false
+[Context built]: 
+✅ LangChain DB connection established using external DATABASE_URL with SSL (verification disabled)
+[RAG] Retrieved 1 results, filtered to 1
+[RAG] Top matches: [
+  {
+    q: 'אפשר להוסיף הרחבה למקרה נזקי מים חוזרים …',
+    score: '0.67',
+    chunk: 'undefined/undefined'
+  }
+]
+[handleMessage] Found 1 relevant QAs from vector search
+[smartAnswer] Starting analysis for: "ומה לגבי נזקי מים?"
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: 1
+[RAG] Normalized question: ומה לגבי נזקי מים?
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Using provided relevant QAs from vector search
+[RAG] Invoking LLM with messages: 2

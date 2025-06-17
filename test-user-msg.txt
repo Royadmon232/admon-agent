@@ -1,0 +1,436 @@
+[RAG] Loading templates from: /Users/royadmon1/Documents/insurance_whatsapBot/marketing_templates.json
+[RAG] Successfully loaded marketing templates
+✅ PromptTemplate loaded correctly
+✅ Loaded 524 knowledge base entries
+Testing restored message handling functionality...
+
+=== Test 1: Single Question (New Topic) ===
+[handleMessage] New message: { phone: '+1234567890', msg: 'מה כולל ביטוח דירה בסיסי?' }
+[IntentDetect] Lead generation detected: מה כולל ביטוח דירה בסיסי?
+[handleMessage] Detected intent: lead_gen
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[twilioService] ✅ delivery_log table ready
+✅ TwilioService connected to DB with SSL
+[memoryService] ✅ Updated customer info for +1234567890: { stage: 'engaged' }
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+✅ LangChain DB connection established using external DATABASE_URL with SSL
+✅ Vector store table structure verified
+[memoryService] ✅ customers and convo_memory tables ready
+[splitQuestions] Found 1 questions (JSON format)
+[handleMessage] Split into questions: 1
+[handleMessage] Processing question: "מה כולל ביטוח דירה בסיסי?"
+[handleMessage] Question related to history: false
+[Context built]: 
+✅ LangChain DB connection established using external DATABASE_URL with SSL (verification disabled)
+[RAG] Retrieved 1 results, filtered to 1
+[RAG] Top matches: [ { q: 'N/A', score: '0.68', chunk: 'undefined/undefined' } ]
+[handleMessage] Found 1 relevant QAs from vector search
+[smartAnswer] Starting analysis for: "מה כולל ביטוח דירה בסיסי?"
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: 1
+[RAG] Normalized question: מה כולל ביטוח דירה בסיסי?
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Using provided relevant QAs from vector search
+[RAG] Invoking LLM with messages: 2
+[RAG] LLM response received: yes
+[RAG] Response content: אני מבין שאת/ה מתעניין/ת בביטוח דירה בסיסי ואני כאן כדי לעזור לך להבין את הנושא בצורה הטובה ביותר.
+
+
+[RAG] Final response content: exists
+[memoryService] ✅ Appended exchange for +1234567890
+Response: {
+  response: 'אני מבין שאת/ה מתעניין/ת בביטוח דירה בסיסי ואני כאן כדי לעזור לך להבין את הנושא בצורה הטובה ביותר.\n' +
+    '\n' +
+    'ביטוח דירה בסיסי כולל בדרך כלל כיסוי לנזקים שנגרמים למבנה הדירה כתוצאה מאירועים כמו שריפה, הצפה, רעידת אדמה, פריצה ונזקים טבעיים נוספים. בנוסף, הביטוח יכול לכלול כיסוי לתכולת הדירה, כלומר לרכוש האישי שלך כמו רהיטים, מכשירי חשמל, תכשיטים ועוד. חשוב לדעת כי ביטוח בסיסי לרוב לא כולל הרחבות מיוחדות כמו כיסוי לנזקי צנרת, חבות מעבידים או כיסויים נרחבים יותר כמו "כל הסיכונים".\n' +
+    '\n' +
+    'אם את/ה מחפש/ת שקט נפשי נוסף, ייתכן שכדאי לשקול חבילת ביטוח מורחבת שמעניקה כיסויים נוספים ומקיפה יותר. ההפרש במחיר בין הביטוח הבסיסי למורחב לא תמיד גדול, ובמקרה הצורך, הכיסוי הנוסף יכול להיות שווה כל שקל.\n' +
+    '\n' +
+    'אם יש לך שאלות נוספות או שאת/ה מעוניין/ת בעזרה בבחירת הביטוח המתאים עבורך, אני כאן בשבילך בכל שלב.\n' +
+    '\n' +
+    'אשמח לעזור לך עם כל שאלה לגבי ביטוח דירה. איך אוכל לסייע?',
+  intent: 'lead_gen'
+}
+
+
+=== Test 2: Follow-up Question ===
+[handleMessage] New message: { phone: '+1234567890', msg: 'ומה לגבי נזקי מים?' }
+[IntentDetect] Follow-up detected: ומה לגבי נזקי מים?
+[handleMessage] Detected intent: follow_up
+[memoryService] ✅ Updated customer info for +1234567890: { stage: 'engaged' }
+[splitQuestions] Found 1 questions (JSON format)
+[handleMessage] Split into questions: 1
+[handleMessage] Processing question: "ומה לגבי נזקי מים?"
+[handleMessage] Question related to history: false
+[Context built]: 
+[RAG] Retrieved 1 results, filtered to 1
+[RAG] Top matches: [
+  {
+    q: 'אפשר להוסיף הרחבה למקרה נזקי מים חוזרים …',
+    score: '0.67',
+    chunk: 'undefined/undefined'
+  }
+]
+[handleMessage] Found 1 relevant QAs from vector search
+[smartAnswer] Starting analysis for: "ומה לגבי נזקי מים?"
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: 1
+[RAG] Normalized question: ומה לגבי נזקי מים?
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Using provided relevant QAs from vector search
+[RAG] Invoking LLM with messages: 2
+[RAG] LLM response received: yes
+[RAG] Response content: ודאי, אני כאן כדי לעזור לך עם כל מה שקשור לנזקי מים בדירה שלך. נזקי מים הם אחד מהנזקים הנפוצים ביותר
+[RAG] Final response content: exists
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[memoryService] ✅ Appended exchange for +1234567890
+Response: {
+  response: 'ודאי, אני כאן כדי לעזור לך עם כל מה שקשור לנזקי מים בדירה שלך. נזקי מים הם אחד מהנזקים הנפוצים ביותר שיכולים להתרחש בדירות, ולכן חשוב מאוד להיות מוכנים מראש. \n' +
+    '\n' +
+    'בכלל ביטוח, יש אפשרות להוסיף הרחבה מיוחדת לפוליסת הביטוח שלך כדי לכסות גם מקרים של רטיבות חוזרת או צורך בטיפול יסודי בצנרת ישנה. הרחבה זו יכולה להעניק לך שקט נפשי ולהבטיח שטיפול בנזקי מים לא יהווה עבורך בעיה כספית.\n' +
+    '\n' +
+    'אם יש לך צנרת ישנה או אם חווית בעבר נזקי מים, אני ממליץ בחום לשקול את ההרחבה הזו. כך תוכל להבטיח שהדירה שלך מוגנת בצורה המקסימלית, גם במקרים של בעיות חוזרות.\n' +
+    '\n' +
+    'אם יש לך שאלות נוספות או אם את/ה מעוניינ/ת בעזרה בהתאמת הפוליסה המדויקת לצרכים שלך, אני כאן בשבילך!\n' +
+    '\n' +
+    'בטח, בוא נמשיך מאיפה שהפסקנו 😊',
+  intent: 'follow_up'
+}
+
+
+=== Test 3: Multiple Questions ===
+[handleMessage] New message: {
+  phone: '+1234567890',
+  msg: 'כמה עולה ביטוח דירה? ומה ההבדל בין ביטוח מבנה לתכולה?'
+}
+[IntentDetect] Lead generation detected: כמה עולה ביטוח דירה? ומה ההבדל בין ביטוח מבנה לתכולה?
+[handleMessage] Detected intent: lead_gen
+[memoryService] ✅ Updated customer info for +1234567890: { stage: 'engaged' }
+[splitQuestions] Found 2 questions (JSON format)
+[handleMessage] Split into questions: 2
+[handleMessage] Processing question: "כמה עולה ביטוח דירה?"
+[handleMessage] Question related to history: false
+[Context built]: 
+[RAG] Retrieved 1 results, filtered to 1
+[RAG] Top matches: [ { q: 'N/A', score: '0.82', chunk: 'undefined/undefined' } ]
+[handleMessage] Found 1 relevant QAs from vector search
+[smartAnswer] Starting analysis for: "כמה עולה ביטוח דירה?"
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: 1
+[RAG] Normalized question: כמה עולה ביטוח דירה?
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Using provided relevant QAs from vector search
+[RAG] Invoking LLM with messages: 2
+[RAG] LLM response received: yes
+[RAG] Response content: אני מבין שאת/ה מעוניינ/ת לדעת כמה עולה ביטוח דירה לחודש. המחירים מתחילים מכ-40 ש"ח לחודש בלבד, אך יש
+[RAG] Final response content: exists
+[handleMessage] Processing question: "מה ההבדל בין ביטוח מבנה לתכולה?"
+[handleMessage] Question related to history: false
+[Context built]: 
+[RAG] Retrieved 1 results, filtered to 1
+[RAG] Top matches: [
+  {
+    q: 'מה ההבדל העיקרי במחיר בין ביטוח מבנה בלב…',
+    score: '0.80',
+    chunk: 'undefined/undefined'
+  }
+]
+[handleMessage] Found 1 relevant QAs from vector search
+[smartAnswer] Starting analysis for: "מה ההבדל בין ביטוח מבנה לתכולה?"
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: 1
+[RAG] Normalized question: מה ההבדל בין ביטוח מבנה לתכולה?
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Using provided relevant QAs from vector search
+[RAG] Invoking LLM with messages: 2
+[RAG] LLM response received: yes
+[RAG] Response content: כמובן! ההבדל העיקרי בין ביטוח מבנה לביטוח תכולה טמון במה שכל אחד מהם מכסה. ביטוח מבנה מתמקד בקירות ה
+[RAG] Final response content: exists
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[memoryService] ✅ Appended exchange for +1234567890
+Response: {
+  response: '1. אני מבין שאת/ה מעוניינ/ת לדעת כמה עולה ביטוח דירה לחודש. המחירים מתחילים מכ-40 ש"ח לחודש בלבד, אך יש לקחת בחשבון שהם עשויים להשתנות בהתאם לערך הדירה שלך והתכולה שבה. מדובר בסכום קטן יחסית שיכול להעניק לך שקט נפשי והגנה מקיפה על הנכס היקר שלך. בנוסף, עם ביטוח דירה תקבל/י שירות אישי ומענה מהיר בכל בעיה שתתעורר. אם יש לך שאלות נוספות או אם תרצי/ה לבדוק אפשרויות נוספות, אני כאן בשבילך.\n' +
+    '\n' +
+    '2. כמובן! ההבדל העיקרי בין ביטוח מבנה לביטוח תכולה טמון במה שכל אחד מהם מכסה. ביטוח מבנה מתמקד בקירות הבית, הגג, הרצפה וכל מה שמחובר באופן קבוע למבנה עצמו. זהו ביטוח שמיועד להגן על המבנה הפיזי של הדירה שלך מפני נזקים כמו שריפות, הצפות או רעידות אדמה.\n' +
+    '\n' +
+    'לעומת זאת, ביטוח תכולה מתייחס לכל מה שנמצא בתוך הבית שלך, כולל ריהוט, מכשירי חשמל, ביגוד, תכשיטים וחפצים אישיים אחרים. זהו ביטוח שמבטיח שיש לך כיסוי לנזק או גניבה של החפצים האישיים שלך.\n' +
+    '\n' +
+    'ביטוח מבנה בלבד נחשב בדרך כלל לזול יותר, מכיוון שהוא מתמקד רק במבנה הפיזי. כאשר את/ה מוסיף/ה גם ביטוח תכולה, המחיר עשוי לעלות, מכיוון שזה מכסה את כל החפצים האישיים שלך, והעלות תלויה בשווי התכולה שתצהיר/י.\n' +
+    '\n' +
+    'אני כאן כדי לעזור לך לבחור את הביטוח הנכון לצרכים שלך, ואם יש שאלות נוספות, אני כאן בשבילך!\n' +
+    '\n' +
+    'אשמח לעזור לך עם כל שאלה לגבי ביטוח דירה. איך אוכל לסייע?',
+  intent: 'lead_gen'
+}
+
+
+=== Test 4: Unrelated Question (New Topic) ===
+[handleMessage] New message: { phone: '+1234567891', msg: 'איך מחשבים את גובה הפרמיה?' }
+[IntentDetect] Default intent for: איך מחשבים את גובה הפרמיה?
+[handleMessage] Detected intent: default
+[memoryService] ✅ Updated customer info for +1234567891: { stage: 'engaged' }
+[splitQuestions] Found 1 questions (JSON format)
+[handleMessage] Split into questions: 1
+[handleMessage] Processing question: "איך מחשבים את גובה הפרמיה?"
+[handleMessage] Question related to history: false
+[Context built]: 
+[RAG] Retrieved 1 results, filtered to 0
+[RAG] Top matches: []
+[handleMessage] No matches from RAG vector search
+[handleMessage] Using GPT-4o for general response
+[smartAnswer] Starting analysis for: "You are a friendly insurance agent named Dony. The user sent this message: "איך מחשבים את גובה הפרמיה?"
+        Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
+        If it's a question about insurance, explain that you're here to help with insurance-related questions.
+        Keep the response concise and engaging."
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: none
+[RAG] Normalized question: You are a friendly insurance agent named Dony. The user sent this message: "איך מחשבים את גובה הפרמיה?"
+        Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
+        If it's a question about insurance, explain that you're here to help with insurance-related questions.
+        Keep the response concise and engaging.
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] No context or relevant QAs - using GPT-4o for independent response
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[memoryService] ✅ Appended exchange for +1234567891
+Response: {
+  response: 'שלום! אני כאן כדי לעזור לך בכל מה שקשור לביטוח דירה. \n' +
+    '\n' +
+    'כשמדובר בחישוב גובה הפרמיה לביטוח דירה, יש כמה גורמים מרכזיים שמשפיעים על המחיר. הנה כמה מהם: \n' +
+    '\n' +
+    '1. **סוג הנכס**: האם מדובר בבית פרטי, דירה בבניין רב קומות, או אולי דירת גן? לכל סוג נכס יש פרמיה שונה.\n' +
+    '\n' +
+    '2. **מיקום הנכס**: אזור גיאוגרפי יכול להשפיע על המחיר, למשל אם מדובר באזור עם סיכון גבוה יותר לגניבות או נזקים טבעיים.\n' +
+    '\n' +
+    '3. **גודל הנכס**: שטח הדירה או הבית וכמות החדרים משפיעים ישירות על המחיר.\n' +
+    '\n' +
+    '4. **תכולה**: אם את/ה מבטח/ת גם את התכולה, הערך של הרכוש בתוך הדירה ישפיע על גובה הפרמיה.\n' +
+    '\n' +
+    '5. **היסטוריית תביעות**: אם היו תביעות קודמות, זה יכול להשפיע על המחיר.\n' +
+    '\n' +
+    '6. **אמצעי בטיחות**: התקנת מערכות אזעקה, מצלמות או דלתות בטיחות יכולים להפחית את הפרמיה.\n' +
+    '\n' +
+    'אני כאן לעזור לך להבין את האפשרויות שלך ולהתאים את הביטוח לצרכים האישיים שלך. אם יש לך שאלות נוספות או שאת/ה מעוניין/ת בהצעת מחיר, אני כאן בשבילך!\n' +
+    '\n' +
+    'אשמח לעזור לך עם כל שאלה לגבי ביטוח דירה. איך אוכל לסייע?',
+  intent: 'default'
+}
+
+
+
+=== Test 5: Greeting and Non-Question Messages ===
+[handleMessage] New message: { phone: '+1234567892', msg: 'שלום' }
+[IntentDetect] Greeting detected: שלום
+[handleMessage] Detected intent: greeting
+[memoryService] ✅ Updated customer info for +1234567892: { stage: 'engaged' }
+[splitQuestions] Found 0 questions (JSON format)
+[handleMessage] Split into questions: 0
+[handleMessage] No questions found, using GPT-4o for general response
+[smartAnswer] Starting analysis for: "You are a friendly insurance agent named Dony. The user sent this message: "שלום"
+      Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
+      If it's a question about insurance, explain that you're here to help with insurance-related questions.
+      Keep the response concise and engaging."
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: none
+[RAG] Normalized question: You are a friendly insurance agent named Dony. The user sent this message: "שלום"
+      Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
+      If it's a question about insurance, explain that you're here to help with insurance-related questions.
+      Keep the response concise and engaging.
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Detected small-talk / out-of-domain question – using GPT-4o friendly fallback
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[memoryService] ✅ Appended exchange for +1234567892
+[handleMessage] New message: { phone: '+1234567892', msg: 'מה שלומך?' }
+[IntentDetect] Small talk detected: מה שלומך?
+[handleMessage] Detected intent: small_talk
+[memoryService] ✅ Updated customer info for +1234567892: { stage: 'engaged' }
+[splitQuestions] Found 1 questions (JSON format)
+[handleMessage] Split into questions: 1
+[handleMessage] Processing question: "מה שלומך?"
+[handleMessage] Question related to history: false
+[Context built]: 
+✅ LangChain DB connection established using external DATABASE_URL with SSL (verification disabled)
+[RAG] Retrieved 1 results, filtered to 0
+[RAG] Top matches: []
+[handleMessage] No matches from RAG vector search
+[handleMessage] Using GPT-4o for general response
+[smartAnswer] Starting analysis for: "You are a friendly insurance agent named Dony. The user sent this message: "מה שלומך?"
+        Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
+        If it's a question about insurance, explain that you're here to help with insurance-related questions.
+        Keep the response concise and engaging."
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: none
+[RAG] Normalized question: You are a friendly insurance agent named Dony. The user sent this message: "מה שלומך?"
+        Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
+        If it's a question about insurance, explain that you're here to help with insurance-related questions.
+        Keep the response concise and engaging.
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Detected small-talk / out-of-domain question – using GPT-4o friendly fallback
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[memoryService] ✅ Appended exchange for +1234567892
+[handleMessage] New message: { phone: '+1234567892', msg: 'תודה רבה על העזרה' }
+[IntentDetect] Thank you detected: תודה רבה על העזרה
+[handleMessage] Detected intent: thank_you
+[memoryService] ✅ Updated customer info for +1234567892: { stage: 'engaged' }
+[splitQuestions] Found 0 questions (JSON format)
+[handleMessage] Split into questions: 0
+[handleMessage] No questions found, using GPT-4o for general response
+[smartAnswer] Starting analysis for: "You are a friendly insurance agent named Dony. The user sent this message: "תודה רבה על העזרה"
+      Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
+      If it's a question about insurance, explain that you're here to help with insurance-related questions.
+      Keep the response concise and engaging."
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: none
+[RAG] Normalized question: You are a friendly insurance agent named Dony. The user sent this message: "תודה רבה על העזרה"
+      Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
+      If it's a question about insurance, explain that you're here to help with insurance-related questions.
+      Keep the response concise and engaging.
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Detected small-talk / out-of-domain question – using GPT-4o friendly fallback
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[memoryService] ✅ Appended exchange for +1234567892
+
+=== Test 6: Specific Question - מה ההבדל בין ביטוח מבנה לתכולה? ===
+[handleMessage] New message: { phone: '+1234567893', msg: 'מה ההבדל בין ביטוח מבנה לתכולה?' }
+[IntentDetect] Lead generation detected: מה ההבדל בין ביטוח מבנה לתכולה?
+[handleMessage] Detected intent: lead_gen
+[memoryService] ✅ Updated customer info for +1234567893: { stage: 'engaged' }
+[splitQuestions] Found 1 questions (JSON format)
+[handleMessage] Split into questions: 1
+[handleMessage] Processing question: "מה ההבדל בין ביטוח מבנה לתכולה?"
+[handleMessage] Question related to history: false
+[Context built]: 
+✅ LangChain DB connection established using external DATABASE_URL with SSL (verification disabled)
+[RAG] Retrieved 1 results, filtered to 1
+[RAG] Top matches: [
+  {
+    q: 'מה ההבדל העיקרי במחיר בין ביטוח מבנה בלב…',
+    score: '0.80',
+    chunk: 'undefined/undefined'
+  }
+]
+[handleMessage] Found 1 relevant QAs from vector search
+[smartAnswer] Starting analysis for: "מה ההבדל בין ביטוח מבנה לתכולה?"
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: 1
+[RAG] Normalized question: מה ההבדל בין ביטוח מבנה לתכולה?
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Using provided relevant QAs from vector search
+[RAG] Invoking LLM with messages: 2
+[RAG] LLM response received: yes
+[RAG] Response content: כמובן! ההבדל בין ביטוח מבנה לתכולה טמון בכיסוי שכל אחד מהם מספק. ביטוח מבנה מכסה את הקירות, הגג והמב
+[RAG] Final response content: exists
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[memoryService] ✅ Appended exchange for +1234567893
+Response: {
+  response: 'כמובן! ההבדל בין ביטוח מבנה לתכולה טמון בכיסוי שכל אחד מהם מספק. ביטוח מבנה מכסה את הקירות, הגג והמבנה הפיזי של הבית עצמו. זה כולל נזקים למבנה כתוצאה משריפות, רעידות אדמה או נזקי מים למעט נזקי צנרת פנימיים.\n' +
+    '\n' +
+    'לעומת זאת, ביטוח תכולה מתייחס לכל מה שנמצא בתוך הבית – הריהוט, מכשירי החשמל, הבגדים, כלי המטבח, והחפצים האישיים שלך. כלומר, אם חס וחלילה יש פריצה או נזק שגורם לאובדן או נזק לחפצים אלו, ביטוח התכולה הוא זה שייתן לך את הכיסוי המתאים.\n' +
+    '\n' +
+    'לרוב, ביטוח תכולה מייקר את הפרמיה בהשוואה לביטוח מבנה בלבד, מכיוון שהוא מכסה ערך רב יותר ומגוון רחב יותר של פריטים. המחיר המדויק תלוי בשווי התכולה שתצהיר. אם יש לך שאלות נוספות או אם את/ה מעוניינ/ת לבדוק אפשרויות ביטוח ספציפיות, אני כאן לעזור!\n' +
+    '\n' +
+    'אשמח לעזור לך עם כל שאלה לגבי ביטוח דירה. איך אוכל לסייע?',
+  intent: 'lead_gen'
+}
+
+=== Test 7: Multiple Insurance Questions ===
+[handleMessage] New message: {
+  phone: {
+    phone: '+1234567894',
+    msg: 'היי, שלום, מה שלומך? רציתי לדעת מה זה כיסוי סייבר ומה זה ביטוח צד ג בביטוח דירה? ומה זה השתתפות עצמית?'
+  },
+  msg: undefined
+}
+Response: {
+  "response": "מצטער/ת, אירעה שגיאה בטיפול בהודעה שלך. אנא נסה/י שוב או פנה/י אלינו בדרך אחרת.",
+  "intent": "error"
+}
+
+=== Custom Test: User Multi-Question ===
+[handleMessage] New message: {
+  phone: '+9999999999',
+  msg: 'מה ההבדל בין ביטוח מבנה לתכולה? מה זה כיסוי סייבר וכיצד משפיע השתתפות עצמית על מחיר ביטוח הדירה?'
+}
+[IntentDetect] Lead generation detected: מה ההבדל בין ביטוח מבנה לתכולה? מה זה כיסוי סייבר וכיצד משפיע השתתפות עצמית על מחיר ביטוח הדירה?
+[handleMessage] Detected intent: lead_gen
+[memoryService] ✅ Updated customer info for +9999999999: { stage: 'engaged' }
+[splitQuestions] Found 3 questions (JSON format)
+[handleMessage] Split into questions: 3
+[handleMessage] Processing question: "מה ההבדל בין ביטוח מבנה לתכולה?"
+[handleMessage] Question related to history: false
+[Context built]: 
+[RAG] Retrieved 1 results, filtered to 1
+[RAG] Top matches: [
+  {
+    q: 'מה ההבדל העיקרי במחיר בין ביטוח מבנה בלב…',
+    score: '0.80',
+    chunk: 'undefined/undefined'
+  }
+]
+[handleMessage] Found 1 relevant QAs from vector search
+[smartAnswer] Starting analysis for: "מה ההבדל בין ביטוח מבנה לתכולה?"
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: 1
+[RAG] Normalized question: מה ההבדל בין ביטוח מבנה לתכולה?
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Using provided relevant QAs from vector search
+[RAG] Invoking LLM with messages: 2
+[RAG] LLM response received: yes
+[RAG] Response content: כמובן! ההבדל בין ביטוח מבנה לביטוח תכולה הוא בעיקר במוקד הכיסוי שכל אחד מהם מספק. ביטוח מבנה מכסה את
+[RAG] Final response content: exists
+[handleMessage] Processing question: "מה זה כיסוי סייבר?"
+[handleMessage] Question related to history: false
+[Context built]: 
+[RAG] Retrieved 1 results, filtered to 1
+[RAG] Top matches: [
+  {
+    q: 'מה זה כיסוי סייבר בבית חכם ומתי מומלץ לה…',
+    score: '0.79',
+    chunk: 'undefined/undefined'
+  }
+]
+[handleMessage] Found 1 relevant QAs from vector search
+[smartAnswer] Starting analysis for: "מה זה כיסוי סייבר?"
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: 1
+[RAG] Normalized question: מה זה כיסוי סייבר?
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Using provided relevant QAs from vector search
+[RAG] Invoking LLM with messages: 2
+[RAG] LLM response received: yes
+[RAG] Response content: כמובן! כיסוי סייבר בבית חכם הוא סוג של ביטוח שמעניק הגנה מפני פריצות דיגיטליות, פגיעה במידע אישי, הו
+[RAG] Final response content: exists
+[handleMessage] Processing question: "כיצד משפיע השתתפות עצמית על מחיר ביטוח הדירה?"
+[handleMessage] Question related to history: false
+[Context built]: 
+[RAG] Retrieved 1 results, filtered to 1
+[RAG] Top matches: [ { q: 'N/A', score: '0.80', chunk: 'undefined/undefined' } ]
+[handleMessage] Found 1 relevant QAs from vector search
+[smartAnswer] Starting analysis for: "כיצד משפיע השתתפות עצמית על מחיר ביטוח הדירה?"
+[smartAnswer] Context has 0 previous exchanges
+[smartAnswer] Relevant QAs provided: 1
+[RAG] Normalized question: כיצד משפיע השתתפות עצמית על מחיר ביטוח הדירה?
+[RAG] Using column: embedding
+[RAG] Context length: 0
+[RAG] Using provided relevant QAs from vector search
+[RAG] Invoking LLM with messages: 2
+[RAG] LLM response received: yes
+[RAG] Response content: נראה שלא קיבלתי שאלה ממך עדיין. אני כאן כדי לסייע לך בכל שאלה שיש לך לגבי ביטוח דירה. אם יש לך שאלה 
+[RAG] Final response content: exists
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+✅ PostgreSQL connected successfully for memoryService using external DATABASE_URL with SSL (verification disabled).
+[memoryService] ✅ Appended exchange for +9999999999
+Response: {
+  "response": "1. כמובן! ההבדל בין ביטוח מבנה לביטוח תכולה הוא בעיקר במוקד הכיסוי שכל אחד מהם מספק. ביטוח מבנה מכסה את החלק הפיזי של הדירה, כלומר את הקירות, הגג, הרצפה וכל מה שהוא חלק מהמבנה הקבוע של הבית. זה כולל גם מערכות קבועות כמו צנרת, חשמל ומערכות חימום/קירור.\n\nלעומת זאת, ביטוח תכולה מתמקד בחפצים האישיים והריהוט שבדירה. הוא כולל כיסוי למכשירי חשמל, רהיטים, בגדים, תכשיטים וכל חפץ אישי אחר שנמצא בתוך הדירה.\n\nההבדל במחיר בין שני סוגי הביטוחים נובע מכך שביטוח התכולה תלוי בערך של החפצים האישיים שתצהיר עליהם. בדרך כלל, ביטוח מבנה בלבד יהיה בעל פרמיה נמוכה יותר, כיוון שהוא מכסה רק את המבנה עצמו. כאשר מוסיפים ביטוח תכולה, המחיר עולה בהתאם לשווי התכולה שהוצהרה. \n\nאם יש לך שאלות נוספות או שאת/ה מתלבט/ת לגבי איזה סוג ביטוח מתאים לצרכים שלך, אני כאן לעזור!\n\n2. כמובן! כיסוי סייבר בבית חכם הוא סוג של ביטוח שמעניק הגנה מפני פריצות דיגיטליות, פגיעה במידע אישי, הונאות והתקפות על מערכות אוטומטיות כמו מצלמות אבטחה, אזעקות ומערכות מיזוג אוויר חכמות. הכיסוי הזה נועד להבטיח שהבית החכם שלך יהיה מוגן מפני איומים דיגיטליים שיכולים לגרום לנזקים כלכליים או לפגוע בפרטיות שלך.\n\nאני ממליץ לשקול להוסיף את הכיסוי הזה במיוחד אם יש לך בבית מערכות חכמות ומתקדמות. מערכות כאלו יכולות להיות חשופות לאיומים מצד גורמים זדוניים, וכיסוי סייבר יכול לספק לך את השקט הנפשי שהבית שלך מוגן גם מהבחינה הדיגיטלית. אם יש לך שאלות נוספות או שאת/ה מתלבט/ת אם זה מתאים לצרכים שלך, אני כאן לעזור בכל מה שתצטרך/י.\n\n3. נראה שלא קיבלתי שאלה ממך עדיין. אני כאן כדי לסייע לך בכל שאלה שיש לך לגבי ביטוח דירה. אם יש לך שאלה מסוימת או נושא שאת/ה רוצה לדעת עליו יותר, אנא שתף/י אותי ואשמח לעזור!\n\nאשמח לעזור לך עם כל שאלה לגבי ביטוח דירה. איך אוכל לסייע?",
+  "intent": "lead_gen"
+}
