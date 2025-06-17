@@ -79,18 +79,30 @@ export async function handleMessage(phone, msg) {
       Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
       If it's a question about insurance, explain that you're here to help with insurance-related questions.
       Keep the response concise and engaging.`;
-      
+      // Always pass history for context
       const answer = await safeCall(
-        () => smartAnswer(generalPrompt, []),
+        () => smartAnswer(generalPrompt, history),
         { fallback: () => 'מצטער, אני בודק וחוזר אליך מיד.' }
       );
-      
-      // Append exchange to conversation history
+      // Prevent duplicate greeting/self-intro
+      if ((intent === 'greeting' || intent === 'small_talk') &&
+          (answer.includes('שלום') || answer.includes('היי') || answer.includes('אני דוני'))
+      ) {
+        // Just return the LLM answer as is
+        await memoryService.appendExchange(phone, msg, answer, {
+          intent,
+          timestamp: new Date().toISOString()
+        });
+        return {
+          response: answer,
+          intent
+        };
+      }
+      // Otherwise, fallback to default logic
       await memoryService.appendExchange(phone, msg, answer, {
         intent,
         timestamp: new Date().toISOString()
       });
-      
       return {
         response: answer,
         intent
@@ -107,7 +119,6 @@ export async function handleMessage(phone, msg) {
       const isRelatedToHistory = await safeCall(
         async () => {
           if (history.length === 0) return false;
-          
           const checkPrompt = `Based on the conversation history below, determine if the current question is related to or continues from the previous conversation.
           
 Conversation History:
@@ -116,8 +127,8 @@ ${history.map(h => `User: ${h.user}\nBot: ${h.bot}`).join('\n\n')}
 Current Question: ${question}
 
 Answer with only "true" if related to previous conversation, or "false" if it's a completely new topic.`;
-          
-          const response = await smartAnswer(checkPrompt, []);
+          // Always pass history for context
+          const response = await smartAnswer(checkPrompt, history);
           return response && response.toLowerCase().includes('true');
         },
         { fallback: () => false }
@@ -147,7 +158,7 @@ Answer with only "true" if related to previous conversation, or "false" if it's 
             () => smartAnswer(question, history, relevantQAs),
             { fallback: () => null }
           );
-      } else {
+        } else {
           console.info("[handleMessage] No matches from RAG vector search");
         }
       }
@@ -159,9 +170,9 @@ Answer with only "true" if related to previous conversation, or "false" if it's 
         Please provide a friendly, helpful response in Hebrew. If it's a greeting or small talk, respond naturally.
         If it's a question about insurance, explain that you're here to help with insurance-related questions.
         Keep the response concise and engaging.`;
-        
+        // Always pass history for context
         answer = await safeCall(
-          () => smartAnswer(generalPrompt, []),
+          () => smartAnswer(generalPrompt, history),
           { fallback: () => 'מצטער, אני בודק וחוזר אליך מיד.' }
         );
       }

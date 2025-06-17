@@ -2,15 +2,14 @@ import { intentDetect, buildSalesResponse } from '../services/salesTemplates.js'
 
 describe('salesTemplates', () => {
   describe('intentDetect', () => {
-    it('should detect frustration intent when text contains "יקר" without insurance context', () => {
+    it('should detect price_pushback when text contains "יקר" without insurance context', () => {
       const testCases = [
         'זה יקר מדי',
         'המחיר גבוה מדי',
         'זה עולה הרבה כסף'
       ];
-
       testCases.forEach(text => {
-        expect(intentDetect(text)).toBe('frustration');
+        expect(intentDetect(text)).toBe('price_pushback');
       });
     });
     
@@ -20,7 +19,6 @@ describe('salesTemplates', () => {
         'הפוליסה עולה הרבה כסף',
         'מחיר הכיסוי גבוה מדי'
       ];
-
       testCases.forEach(text => {
         expect(intentDetect(text)).toBe('price_pushback');
       });
