@@ -49,6 +49,14 @@ async function testMessageFlow() {
     const result7 = await handleMessage(testMessage7);
     console.log('Response:', JSON.stringify(result7, null, 2));
     
+    // Test 8: Name memory test
+    console.log('\n=== Test 8: Name Memory Test ===');
+    const testPhone = '+1999999999';
+    const responseA = await handleMessage(testPhone, 'קוראים לי מנשה צור');
+    console.log('Response to first message:', responseA);
+    const responseB = await handleMessage(testPhone, 'מה השם שלי המלא?');
+    console.log('Response to second message:', responseB);
+    
   } catch (error) {
     console.error('Error during testing:', error);
   }

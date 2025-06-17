@@ -231,8 +231,8 @@ export function chooseCTA(intent, memory = {}) {
     
     // Return null for empty templates
     if (!template || template.trim().length === 0) {
-      return null;
-    }
+        return null;
+      }
 
     return template;
   } catch (error) {

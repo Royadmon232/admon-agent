@@ -493,7 +493,7 @@ ${contextBlock}
 ${conversationHistory}
 
 שאלה נוכחית: ${question}`;
-
+      
       const messages = [
         new SystemMessage(contextCheckPrompt),
         new HumanMessage('ענה על השאלה הנוכחית בהתבסס על ההיסטוריה. אם השאלה לא קשורה להיסטוריה, החזר רק את המילה "null".')
@@ -509,13 +509,13 @@ ${conversationHistory}
       
       if (response.content && response.content.trim().toLowerCase() !== 'null') {
         console.debug('[RAG] Generated response from conversation context');
-        return response.content.trim();
-      } else {
+      return response.content.trim();
+        } else {
         console.debug('[RAG] Question not related to conversation history');
         return null;
       }
     }
-    
+
     // Case 3: No context and no relevant QAs - use GPT-4o for independent response
     if (!relevantQAs && context.length === 0) {
       console.info('[RAG] No context or relevant QAs - using GPT-4o for independent response');
@@ -546,7 +546,7 @@ ${conversationHistory}
       );
       return response.content.trim();
     }
-    
+
     // Default case - should not reach here
     console.warn('[RAG] Unexpected case in smartAnswer');
     return null;

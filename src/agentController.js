@@ -147,7 +147,7 @@ Answer with only "true" if related to previous conversation, or "false" if it's 
             () => smartAnswer(question, history, relevantQAs),
             { fallback: () => null }
           );
-        } else {
+      } else {
           console.info("[handleMessage] No matches from RAG vector search");
         }
       }
@@ -233,7 +233,7 @@ function findSimilarPreviousQuestion(question, history, threshold = 0.65) {
     if (similarity > maxSimilarity && similarity >= threshold) {
       maxSimilarity = similarity;
       mostSimilar = prevQuestion;
-    }
+  }
   }
   
   return mostSimilar;
