@@ -651,28 +651,75 @@ app.post('/twilio/webhook', async (req, res) => {
   try {
     const botResponse = await handleMessage(senderPhone, messageText);
 
-    if (!botResponse || !botResponse.response || typeof botResponse.response !== 'string' || botResponse.response.startsWith("מצטער, אירעה שגיאה")) {
+    if (!botResponse || (!botResponse.response && !botResponse.answers) || (typeof botResponse.response === 'string' && botResponse.response.startsWith("מצטער, אירעה שגיאה"))) {
       console.error(`[Twilio] Failed to get valid response from handleMessage for: "${messageText}". Response: ${JSON.stringify(botResponse)}`);
       return res.status(500).send('Failed to get bot response.');
     }
 
-    console.log(`[Twilio] Bot response for ${senderPhone}: "${botResponse.response.substring(0, 60)}..."`);
-
-    const wappResult = await sendWapp(senderPhone, botResponse.response);
-
-    if (wappResult.success) {
-      console.log(`[Twilio] Successfully sent WhatsApp reply to ${senderPhone}. SID: ${wappResult.sid}`);
+    // לוגיקת פיצול כמו ב-handleLocalMessage
+    const MAX_LENGTH = 1600;
+    function splitByParagraphOrSentence(text) {
+      if (text.length <= MAX_LENGTH) return [text];
+      // פיצול לפסקאות
+      const paras = text.split(/\n\n|\r\n\r\n/);
+      const result = [];
+      let current = '';
+      for (const para of paras) {
+        if ((current + '\n\n' + para).length > MAX_LENGTH) {
+          if (current) result.push(current);
+          if (para.length > MAX_LENGTH) {
+            // פיצול למשפטים
+            const sentences = para.match(/[^.!?\n]+[.!?\n]+/g) || [para];
+            let sentCurrent = '';
+            for (const sent of sentences) {
+              if ((sentCurrent + sent).length > MAX_LENGTH) {
+                if (sentCurrent) result.push(sentCurrent);
+                sentCurrent = sent;
+              } else {
+                sentCurrent += sent;
+              }
+            }
+            if (sentCurrent) result.push(sentCurrent);
+          } else {
+            result.push(para);
+          }
+          current = '';
+        } else {
+          current = current ? current + '\n\n' + para : para;
+        }
+      }
+      if (current) result.push(current);
+      return result;
+    }
+    let allParts = [];
+    if (Array.isArray(botResponse.answers) && botResponse.answers.length > 0) {
+      for (const ans of botResponse.answers) {
+        allParts.push(...splitByParagraphOrSentence(ans));
+      }
+    } else if (botResponse.response) {
+      allParts = splitByParagraphOrSentence(botResponse.response);
+    }
+    let allSucceeded = true;
+    for (const part of allParts) {
+      const wappResult = await sendWapp(senderPhone, part);
+      if (wappResult.success) {
+        console.log(`[Twilio] Successfully sent WhatsApp reply to ${senderPhone}. SID: ${wappResult.sid}`);
+      } else {
+        allSucceeded = false;
+        console.warn(`[Twilio] Failed to send WhatsApp reply to ${senderPhone}, attempting SMS fallback. Error: ${wappResult.error}`);
+        const smsResult = await smsFallback(senderPhone, part);
+        if (smsResult.success) {
+          console.log(`[Twilio] Successfully sent SMS fallback to ${senderPhone}. SID: ${smsResult.sid}`);
+        } else {
+          console.error(`[Twilio] Failed to send SMS fallback to ${senderPhone}. Error: ${smsResult.error}`);
+          return res.status(500).send('Failed to send response via Twilio WhatsApp or SMS.');
+        }
+      }
+    }
+    if (allSucceeded) {
       return res.status(200).type('text/xml').send('<Response/>'); // Twilio expects XML response for success
     } else {
-      console.warn(`[Twilio] Failed to send WhatsApp reply to ${senderPhone}, attempting SMS fallback. Error: ${wappResult.error}`);
-      const smsResult = await smsFallback(senderPhone, botResponse.response);
-      if (smsResult.success) {
-        console.log(`[Twilio] Successfully sent SMS fallback to ${senderPhone}. SID: ${smsResult.sid}`);
-        return res.status(200).type('text/xml').send('<Response/>');
-      } else {
-        console.error(`[Twilio] Failed to send SMS fallback to ${senderPhone}. Error: ${smsResult.error}`);
-        return res.status(500).send('Failed to send response via Twilio WhatsApp or SMS.');
-      }
+      return res.status(207).send('Some parts failed to send, see logs.');
     }
   } catch (error) {
     console.error(`[Twilio] Unexpected error processing webhook for ${senderPhoneWithPrefix}:`, error);
