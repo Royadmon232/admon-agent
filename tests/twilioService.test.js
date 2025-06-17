@@ -1,6 +1,10 @@
 import { jest } from '@jest/globals';
-import twilio from 'twilio';
-import { sendWapp, smsFallback } from '../services/twilioService.js';
+
+// Mock environment variables BEFORE imports
+process.env.TWILIO_ACCOUNT_SID = 'ACtest1234567890abcdef1234567890ab';
+process.env.TWILIO_AUTH_TOKEN = 'test_auth_token';
+process.env.TWILIO_WHATSAPP_FROM_NUMBER = 'whatsapp:+14155238886';
+process.env.TWILIO_SMS_SID = 'test_sms_sid';
 
 // Mock twilio module
 jest.mock('twilio', () => {
@@ -12,11 +16,8 @@ jest.mock('twilio', () => {
   }));
 });
 
-// Mock environment variables
-process.env.TWILIO_ACCOUNT_SID = 'test_account_sid';
-process.env.TWILIO_AUTH_TOKEN = 'test_auth_token';
-process.env.TWILIO_WHATSAPP_FROM_NUMBER = 'test_whatsapp_number';
-process.env.TWILIO_SMS_SID = 'test_sms_sid';
+import twilio from 'twilio';
+import { sendWapp, smsFallback } from '../services/twilioService.js';
 
 describe('Twilio Service', () => {
   let mockTwilioClient;

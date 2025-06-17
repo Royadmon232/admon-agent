@@ -57,6 +57,28 @@ async function testMessageFlow() {
     const responseB = await handleMessage(testPhone, 'מה השם שלי המלא?');
     console.log('Response to second message:', responseB);
     
+    // Test: Conversation memory integration
+    (async () => {
+      const testPhone = '+1999999999';
+      console.log('\n=== Conversation Memory Integration Test ===');
+      const responseA = await handleMessage(testPhone, 'קוראים לי מנשה צור');
+      console.log('Response to first message:', responseA);
+      const responseB = await handleMessage(testPhone, 'מה השם שלי המלא?');
+      console.log('Response to second message:', responseB);
+    })();
+    
+    // Test: Multi-turn insurance context and memory
+    (async () => {
+      const testPhone = '+1888888888';
+      console.log('\n=== Multi-turn Insurance Context & Memory Test ===');
+      const response1 = await handleMessage(testPhone, 'מה שלומך?');
+      console.log('Response to first message:', response1);
+      const response2 = await handleMessage(testPhone, 'מה ההבדל בין ביטוח מבנה לתכולה?');
+      console.log('Response to second message:', response2);
+      const response3 = await handleMessage(testPhone, 'לא הבנתי תוכל לחזור שוב על מה שרשמת? , בנוסף מה זה כיסוי סייבר?');
+      console.log('Response to third message:', response3);
+    })();
+    
   } catch (error) {
     console.error('Error during testing:', error);
   }

@@ -202,42 +202,29 @@ export async function appendExchange(phone, userMsg, botReply, metadata = {}) {
       [phone]
     );
 
-    // Then append the exchange to history using a transaction
-    await pool.query('BEGIN');
-    try {
-      // First try to insert
-      await pool.query(
-        `INSERT INTO convo_memory (phone, history, last_updated, metadata)
-         VALUES ($1, jsonb_build_array(jsonb_build_object(
-           'user', $2::text, 
-           'bot', $3::text,
-           'timestamp', CURRENT_TIMESTAMP,
-           'metadata', $4::jsonb
-         )), CURRENT_TIMESTAMP, $4::jsonb)`,
-        [phone, userMsg, botReply, metadata]
-      );
-    } catch (err) {
-      // If insert fails, update existing record
-      await pool.query(
-        `UPDATE convo_memory 
-         SET history = COALESCE(history, '[]'::jsonb) || jsonb_build_array(jsonb_build_object(
-           'user', $2::text, 
-           'bot', $3::text,
-           'timestamp', CURRENT_TIMESTAMP,
-           'metadata', $4::jsonb
-         )),
-         last_updated = CURRENT_TIMESTAMP,
-         metadata = metadata || $4::jsonb
-         WHERE phone = $1`,
-        [phone, userMsg, botReply, metadata]
-      );
-    }
-    await pool.query('COMMIT');
+    // Then append the exchange to history using upsert
+    await pool.query(
+      `INSERT INTO conversation_memory (phone, history, last_updated)
+       VALUES ($1, jsonb_build_array(jsonb_build_object(
+         'user', $2::text, 
+         'bot', $3::text,
+         'timestamp', CURRENT_TIMESTAMP,
+         'metadata', $4::jsonb
+       )), CURRENT_TIMESTAMP)
+       ON CONFLICT (phone) DO UPDATE
+       SET history = conversation_memory.history || jsonb_build_array(jsonb_build_object(
+         'user', $2::text, 
+         'bot', $3::text,
+         'timestamp', CURRENT_TIMESTAMP,
+         'metadata', $4::jsonb
+       )),
+       last_updated = CURRENT_TIMESTAMP`,
+      [phone, userMsg, botReply, metadata]
+    );
     
-    console.log(`[memoryService] ✅ Appended exchange for ${phone}`);
+    console.log(`[memoryService] ✅ Appended exchange for ${phone} (conversation_memory)`);
   } catch (err) {
-    await pool.query('ROLLBACK');
-    console.error('[memoryService] ⚠️  Failed to append exchange:', err.message);
+    console.error('[memoryService] ⚠️  Failed to append exchange (conversation_memory):', err.message);
     throw err;
   }
 }
@@ -250,30 +237,23 @@ export async function appendExchange(phone, userMsg, botReply, metadata = {}) {
  */
 export async function getHistory(phone, maxTurns = 10) {
   try {
-    const result = await pool.query(
-      `SELECT c.first_name, c.last_name, c.stage, m.history, m.metadata 
-       FROM customers c 
-       LEFT JOIN convo_memory m ON c.phone = m.phone 
-       WHERE c.phone = $1`,
+    // Only fetch customer info and history from conversation_memory
+    const customerResult = await pool.query(
+      `SELECT first_name, last_name, stage FROM customers WHERE phone = $1`,
       [phone]
     );
-    
-    if (!result.rows[0]) {
-      return { history: [], customer: null };
-    }
-    
-    const { first_name, last_name, stage, history, metadata } = result.rows[0];
+    const historyResult = await pool.query(
+      `SELECT history FROM conversation_memory WHERE phone = $1`,
+      [phone]
+    );
+    const customer = customerResult.rows[0] || null;
+    const history = historyResult.rows[0]?.history || [];
     return {
-      history: history?.slice(-maxTurns) || [],
-      customer: {
-        firstName: first_name,
-        lastName: last_name,
-        stage,
-        metadata
-      }
+      history: history.slice(-maxTurns),
+      customer
     };
   } catch (err) {
-    console.error('[memoryService] ⚠️  Failed to get history:', err.message);
+    console.error('[memoryService] ⚠️  Failed to get history (conversation_memory):', err.message);
     return { history: [], customer: null };
   }
 }

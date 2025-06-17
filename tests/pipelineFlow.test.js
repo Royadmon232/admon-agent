@@ -1,13 +1,21 @@
 import { jest } from '@jest/globals';
+
+// Mock dependencies BEFORE imports
+jest.mock('../services/memoryService.js', () => ({
+  getHistory: jest.fn(),
+  appendExchange: jest.fn()
+}));
+jest.mock('../services/vectorSearch.js', () => ({
+  lookupRelevantQAs: jest.fn()
+}));
+jest.mock('../services/ragChain.js', () => ({
+  smartAnswer: jest.fn()
+}));
+
 import { handleMessage } from '../src/agentController.js';
 import { getHistory, appendExchange } from '../services/memoryService.js';
 import { lookupRelevantQAs } from '../services/vectorSearch.js';
 import { smartAnswer } from '../services/ragChain.js';
-
-// Mock dependencies
-jest.mock('../services/memoryService.js');
-jest.mock('../services/vectorSearch.js');
-jest.mock('../services/ragChain.js');
 
 describe('Pipeline Flow Integration', () => {
   const mockPhone = '+1234567890';
