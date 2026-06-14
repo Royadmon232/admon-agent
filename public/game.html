@@ -250,7 +250,12 @@ addEventListener("touchend", () => pointer.active = false);
 
 /* ----------------------------- entities ---------------------------- */
 let stars = [], bullets = [], enemies = [], parts = [], powerups = [], floaters = [];
-let player, state = "start", score = 0, best = +(localStorage.neonBest || 0);
+// safe storage — file:// in some browsers throws on localStorage access
+const Store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+let player, state = "start", score = 0, best = +Store.get("neonBest", 0);
 let combo = 1, comboTimer = 0, wave = 1, waveTimer = 0, spawnTimer = 0, shootTimer = 0;
 let shake = 0, slowmo = 1, frame = 0;
 
@@ -654,7 +659,7 @@ function gameOver() {
   state = "over"; Audio.over(); shake = 20; flashScreen(0.7);
   burst(player.x, player.y, "#00f0ff", 60, 9, 70);
   ring(player.x, player.y, "#fff", 10, 200);
-  if (score > best) { best = score; localStorage.neonBest = best; }
+  if (score > best) { best = score; Store.set("neonBest", best); }
   document.getElementById("finalScore").textContent = score.toLocaleString("he");
   document.getElementById("bestScore").textContent = "שיא: " + best.toLocaleString("he");
   hud.classList.remove("show"); hpWrap.classList.remove("show");
